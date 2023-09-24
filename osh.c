@@ -722,21 +722,35 @@ int *pf1, *pf2;
 			prs("glob: cannot execute\n");
 			exit(255);
 		}
-		scan(t, trim);
-		*linep = 0;
-		texec(t->t_dcom, t);
-		cp1 = linep;
-		cp2 = getenv("PATH");
-		while((*cp1 = *cp2++))
-			cp1++;
-		*cp1++ = '/';
-		cp2 = *t->t_dcom;
-		while((*cp1++ = *cp2++));
-		texec(linep+4, t);
-		texec(linep, t);
-		prs(*t->t_dcom);
-		err(": not found",255);
-		exit(255);
+		{
+			int p = 0;
+
+			scan(t, trim);
+			*linep = 0;
+			texec(t->t_dcom, t);
+			cp1 = linep;
+			cp2 = getenv("PATH");
+			while((*cp1 = *cp2++)) {
+				p++;
+				if(*cp1 == ':') {
+					*cp1++ = '/';
+					cp2 = *t->t_dcom;
+					while((*cp1++ = *cp2++));
+					texec(linep, t);
+					cp1 = linep;
+					cp2 = &getenv("PATH")[p];
+					continue;
+				}
+				cp1++;
+			}
+			*cp1++ = '/';
+			cp2 = *t->t_dcom;
+			while((*cp1++ = *cp2++));
+			texec(linep, t);
+			prs(*t->t_dcom);
+			err(": not found",255);
+			exit(255);
+		}
 
 	case TFIL:
 		f = t->t_dflg;
