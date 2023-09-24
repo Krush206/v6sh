@@ -75,8 +75,8 @@
 struct tree {
   int t_dtyp,
       t_dflg;
-  char t_dlef[100],
-      t_drit[100],
+  char *t_dlef,
+      *t_drit,
       *t_dspr,
       *t_dcom[100];
 } t;
@@ -467,9 +467,9 @@ struct tree *syn3(p1, p2)
 char **p1, **p2;
 {
 	register char **p;
-	char **lp, **rp;
+	char **lp, **rp, *i, *o;
 	register struct tree *t = tree();
-	int n, l, i, o, c, flg;
+	int n, l, c, flg;
 
 	flg = 0;
 	if(**p2 == ')')
@@ -516,12 +516,12 @@ char **p1, **p2;
 			if(c == '<') {
 				if(i != 0)
 					error++;
-				i = **p;
+				i = *p;
 				continue;
 			}
 			if(o != 0)
 				error++;
-			o = **p;
+			o = *p;
 		}
 		continue;
 
@@ -549,8 +549,8 @@ char **p1, **p2;
 		t->t_dcom[l] = p1[l];
 out:
 	t->t_dflg = flg;
-	*t->t_dlef = i;
-	*t->t_drit = o;
+	t->t_dlef = i;
+	t->t_drit = o;
 	return(t);
 }
 
@@ -660,7 +660,7 @@ int *pf1, *pf2;
 				pwait(i, t);
 			return 1;
 		}
-		if(*t->t_dlef != 0) {
+		if(t->t_dlef != 0) {
 			close(0);
 			i = open(t->t_dlef, 0);
 			if(i < 0) {
@@ -669,7 +669,7 @@ int *pf1, *pf2;
 				exit(255);
 			}
 		}
-		if(*t->t_drit != 0) {
+		if(t->t_drit != 0) {
 			if((f&FCAT) != 0) {
 				i = open(t->t_drit, 1);
 				if(i >= 0) {
@@ -765,10 +765,10 @@ int *pf1, *pf2;
 
 	case TLST:
 		f = t->t_dflg&FINT;
-		if((*(char **) &t1->t_dlef = t->t_dlef))
+		if((t1->t_dlef = t->t_dlef))
 			t1->t_dflg |= f;
 		execute(t1);
-		if((*(char **) &t1->t_drit = t->t_drit))
+		if((t1->t_drit = t->t_drit))
 			t1->t_dflg |= f;
 		execute(t1);
 		return 1;
