@@ -210,13 +210,11 @@ int main1()
 			setjmp(jmpbuf);
 			if (error)
 				return 1;
-			if(!(t = syntax(args, argp))) {
-				if(error != 0)
-					err("syntax error",255);
-				return 1;
-			}
-			execute(t);
+			t = syntax(args, argp);
 		}
+		if(error != 0)
+			err("syntax error",255); else
+			execute(t);
 	}
 }
 
