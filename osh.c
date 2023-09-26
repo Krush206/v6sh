@@ -128,7 +128,7 @@ int main(c, av)
 int c;
 char **av;
 {
-	register f;
+	register int f;
 	register char *acname, **v;
 
 	for(f=3; f<15; f++)
@@ -908,7 +908,7 @@ int i;
 			if(s&0200)
 				prs(" -- Core dumped");
 		}
-		if (e || s&&stoperr)
+		if (e || (s&&stoperr))
 			err("", (s>>8)|e );
 		errval |= (s>>8);
 	}
