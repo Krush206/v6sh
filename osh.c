@@ -130,29 +130,33 @@ char **av;
 {
 	register int f;
 	register char *acname, **v;
+	int execflg;
 
 	for(f=3; f<15; f++)
 		close(f);
 	dolc = getpid();
 	for(f=4; f>=0; f--) {
-		dolc = dolc/10;
 		pidp[f] = dolc%10 + '0';
+		dolc = dolc/10;
 	}
 	v = av;
 	acname = "<none>";
 	promp = "% ";
 	if((uid = getuid()) == 0)
 		promp = "# ";
+	stoperr = 0;
 	if(c>1 && v[1][0]=='-' && v[1][1]=='e') {
 		++stoperr;
 		v[1] = v[0];
 		++v;
 		--c;
 	}
+	arginp = 0;
+	execflg = onelflg = 0;
 	if(c > 1) {
 		promp = 0;
 		if (*v[1]=='-') {
-			**v = '-';
+			execflg = 1;
 			if (v[1][1]=='c' && c>2)
 				arginp = v[2];
 			else if (v[1][1]=='t')
@@ -166,10 +170,11 @@ char **av;
 			}
 		}
 	}
-	if(**v == '-') {
+	setintr = 0;
+	if(execflg) {
 		signal(QUIT, 1);
-		f = signal(INTR, 1);
-		if ((arginp==0&&onelflg==0) || (f&01)==0)
+		signal(INTR, 1);
+		if (arginp==0&&onelflg==0)
 			setintr++;
 	}
 	dolv = v;
@@ -190,9 +195,9 @@ int main1()
 	extern struct tree *syntax();
 
 	argp = args;
-	eargp = args+ARGSIZ-5;
+	eargp = args+ARGSIZ-1;
 	linep = line;
-	elinep = line+LINSIZ-5;
+	elinep = line+LINSIZ-1;
 	error = 0;
 	gflg = 0;
 	do {
