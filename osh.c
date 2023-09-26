@@ -63,12 +63,12 @@
 #define TPAR 2
 #define TFIL 3
 #define TLST 4
-#define DTYP 0
-#define DLEF 1
-#define DRIT 2
-#define DFLG 3
-#define DSPR 4
-#define DCOM 5
+#define DTYP t_dtyp
+#define DLEF t_dlef
+#define DRIT t_drit
+#define DFLG t_dflg
+#define DSPR t_dspr
+#define DCOM t_dcom
 #define	ENOMEM	12
 #define	ENOEXEC 8
 
@@ -172,8 +172,8 @@ char **av;
 		if ((arginp==0&&onelflg==0) || (f&01)==0)
 			setintr++;
 	}
-	dolv = v+1;
-	dolc = c-1;
+	dolv = v;
+	dolc = c;
 
 loop:
 	if(promp != 0)
@@ -415,16 +415,16 @@ char **p1, **p2;
 
 			l = **p;
 			t = tree();
-			t->t_dtyp = TLST;
-			t->t_dlef = syn2(p1, p);
-			t->t_dflg = 0;
+			t->DTYP = TLST;
+			t->DLEF = syn2(p1, p);
+			t->DFLG = 0;
 			if(l == '&') {
-				t1 = t->t_dlef;
-				t->t_dflg |= FAND|FPRS|FINT;
+				t1 = t->DLEF;
+				t->DFLG |= FAND|FPRS|FINT;
 			}
 			if((t1 = syntax(p+1, p2)))
-				t->t_drit = t1; else
-				t->t_drit = 0;
+				t->DRIT = t1; else
+				t->DRIT = 0;
 			return(t);
 		}
 	}
@@ -464,10 +464,10 @@ char **p1, **p2;
 	case '^':
 		if(l == 0) {
 			t = tree();
-			t->t_dtyp = TFIL;
-			t->t_dlef = syn3(p1, p);
-			t->t_drit = syn2(p+1, p2);
-			t->t_dflg = 0;
+			t->DTYP = TFIL;
+			t->DLEF = syn3(p1, p);
+			t->DRIT = syn2(p+1, p2);
+			t->DFLG = 0;
 			return(t);
 		}
 	}
@@ -550,21 +550,21 @@ char **p1, **p2;
 		if(n != 0)
 			error++;
 		t = tree();
-		t->t_dtyp = TPAR;
-		*(struct tree **) &t->t_dspr = syn1(lp, rp);
+		t->DTYP = TPAR;
+		*(struct tree **) &t->DSPR = syn1(lp, rp);
 		goto out;
 	}
 	if(n == 0)
 		error++;
 	p1[n++] = 0;
 	t = tree();
-	t->t_dtyp = TCOM;
+	t->DTYP = TCOM;
 	for(l=0; l<n; l++)
-		t->t_dcom[l] = p1[l];
+		t->DCOM[l] = p1[l];
 out:
-	t->t_dflg = flg;
-	*(char **) &t->t_dlef = i;
-	*(char **) &t->t_drit = o;
+	t->DFLG = flg;
+	*(char **) &t->DLEF = i;
+	*(char **) &t->DRIT = o;
 	return(t);
 }
 
@@ -574,7 +574,7 @@ int (*f)();
 {
 	register char *p, **t, c;
 
-	t = at->t_dcom;
+	t = at->DCOM;
 	while((p = *t++))
 		while((c = *p))
 			*p++ = (*f)(c);
@@ -607,13 +607,13 @@ int *pf1, *pf2;
 	extern char *getenv();
 
 	if(t != 0)
-	switch(t->t_dtyp) {
+	switch(t->DTYP) {
 
 	case TCOM:
-		cp1 = *t->t_dcom;
+		cp1 = *t->DCOM;
 		if(equal(cp1, "chdir")) {
-			if(t->t_dcom[1] != 0) {
-				if(chdir(t->t_dcom[1]) < 0)
+			if(t->DCOM[1] != 0) {
+				if(chdir(t->DCOM[1]) < 0)
 					err("chdir: bad directory",255);
 			} else
 				err("chdir: arg count",255);
@@ -631,14 +631,14 @@ int *pf1, *pf2;
 		}
 		if(equal(cp1, "login")) {
 			if(promp != 0) {
-				execv("/bin/login", t->t_dcom);
+				execv("/bin/login", t->DCOM);
 			}
 			prs("login: cannot execute\n");
 			return 1;
 		}
 		if(equal(cp1, "newgrp")) {
 			if(promp != 0) {
-				execv("/bin/newgrp", t->t_dcom);
+				execv("/bin/newgrp", t->DCOM);
 			}
 			prs("newgrp: cannot execute\n");
 			return 1;
@@ -651,7 +651,7 @@ int *pf1, *pf2;
 			return 1;
 
 	case TPAR:
-		f = t->t_dflg;
+		f = t->DFLG;
 		i = 0;
 		if((f&FPAR) == 0)
 			i = fork();
@@ -674,26 +674,26 @@ int *pf1, *pf2;
 				pwait(i);
 			return 1;
 		}
-		if(t->t_dlef != 0) {
+		if(t->DLEF != 0) {
 			close(0);
-			i = open(t->t_dlef, 0);
+			i = open(t->DLEF, 0);
 			if(i < 0) {
-				prs(t->t_dlef);
+				prs(t->DLEF);
 				err(": cannot open",255);
 				exit(255);
 			}
 		}
-		if(t->t_drit != 0) {
+		if(t->DRIT != 0) {
 			if((f&FCAT) != 0) {
-				i = open(t->t_drit, 1);
+				i = open(t->DRIT, 1);
 				if(i >= 0) {
 					lseek(i, 0L, 2);
 					goto f1;
 				}
 			}
-			i = creat(t->t_drit, 0666);
+			i = creat(t->DRIT, 0666);
 			if(i < 0) {
-				prs(t->t_drit);
+				prs(t->DRIT);
 				err(": cannot create",255);
 				exit(255);
 			}
@@ -714,7 +714,7 @@ int *pf1, *pf2;
 			close(pf2[0]);
 			close(pf2[1]);
 		}
-		if((f&FINT)!=0 && t->t_dlef==0 && (f&FPIN)==0) {
+		if((f&FINT)!=0 && t->DLEF==0 && (f&FPIN)==0) {
 			close(0);
 			open("/dev/null", 0);
 		}
@@ -722,17 +722,17 @@ int *pf1, *pf2;
 			signal(INTR, 0);
 			signal(QUIT, 0);
 		}
-		if(t->t_dtyp == TPAR) {
-			if((t1 = (struct tree *) t->t_dspr))
-				t1->t_dflg |= f&FINT;
+		if(t->DTYP == TPAR) {
+			if((t1 = (struct tree *) t->DSPR))
+				t1->DFLG |= f&FINT;
 			execute(t1);
 			exit(255);
 		}
 		gflg = 0;
 		scan(t, tglob);
 		if(gflg) {
-			t->t_dspr = "/etc/glob";
-			execv(t->t_dspr, t->t_dspr);
+			t->DSPR = "/etc/glob";
+			execv(t->DSPR, t->DSPR);
 			prs("glob: cannot execute\n");
 			exit(255);
 		}
@@ -741,14 +741,14 @@ int *pf1, *pf2;
 
 			scan(t, trim);
 			*linep = 0;
-			texec(t->t_dcom, t);
+			texec(t->DCOM, t);
 			cp1 = linep;
 			cp2 = getenv("PATH");
 			while((*cp1 = *cp2++)) {
 				p++;
 				if(*cp1 == ':') {
 					*cp1++ = '/';
-					cp2 = *t->t_dcom;
+					cp2 = *t->DCOM;
 					while((*cp1++ = *cp2++));
 					texec(linep, t);
 					cp1 = linep;
@@ -758,32 +758,32 @@ int *pf1, *pf2;
 				cp1++;
 			}
 			*cp1++ = '/';
-			cp2 = *t->t_dcom;
+			cp2 = *t->DCOM;
 			while((*cp1++ = *cp2++));
 			texec(linep, t);
-			prs(*t->t_dcom);
+			prs(*t->DCOM);
 			err(": not found",255);
 			exit(255);
 		}
 
 	case TFIL:
-		f = t->t_dflg;
+		f = t->DFLG;
 		pipe(pv);
-		t1 = t->t_dlef;
-		t1->t_dflg |= FPOU | (f&(FPIN|FINT|FPRS));
+		t1 = t->DLEF;
+		t1->DFLG |= FPOU | (f&(FPIN|FINT|FPRS));
 		execute(t1, pf1, pv);
-		t1 = t->t_drit;
-		t1->t_dflg |= FPIN | (f&(FPOU|FINT|FAND|FPRS));
+		t1 = t->DRIT;
+		t1->DFLG |= FPIN | (f&(FPOU|FINT|FAND|FPRS));
 		execute(t1, pv, pf2);
 		return 1;
 
 	case TLST:
-		f = t->t_dflg&FINT;
-		if((t1 = t->t_dlef))
-			t1->t_dflg |= f;
+		f = t->DFLG&FINT;
+		if((t1 = t->DLEF))
+			t1->DFLG |= f;
 		execute(t1);
-		if((t1 = t->t_drit))
-			t1->t_dflg |= f;
+		if((t1 = t->DRIT))
+			t1->DFLG |= f;
 		execute(t1);
 		return 1;
 
@@ -798,17 +798,17 @@ struct tree *at;
 	register struct tree *t;
 
 	t = at;
-	execv(f, t->t_dcom);
+	execv(f, t->DCOM);
 	if (errno==ENOEXEC) {
 		if (*linep)
-			*(char **) &t->t_dcom = linep;
-		t->t_dspr = "/usr/bin/osh";
-		execv(t->t_dspr, t->t_dspr);
+			*(char **) &t->DCOM = linep;
+		t->DSPR = "/usr/bin/osh";
+		execv(t->DSPR, t->DSPR);
 		prs("No shell!\n");
 		exit(255);
 	}
 	if (errno==ENOMEM) {
-		prs(*t->t_dcom);
+		prs(*t->DCOM);
 		err(": too large",255);
 		exit(255);
 	}
