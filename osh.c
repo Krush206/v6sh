@@ -75,11 +75,12 @@
 struct tree {
   int t_dtyp,
       t_dflg;
-  char *t_dlef,
-      *t_drit,
-      *t_dspr,
-      *t_dcom[100];
-} t;
+  struct tree *t_dlef,
+	      *t_drit;
+  char *t_dspr,
+       *t_dcom[TRESIZ];
+} trebuf[TRESIZ];
+int treec;
 int errval;
 char	*dolp;
 char	pidp[6];
@@ -122,7 +123,6 @@ char	*mesg[] = {
 
 char	line[LINSIZ];
 char	*args[ARGSIZ];
-int	trebuf[TRESIZ];
 
 int main(c, av)
 int c;
@@ -199,16 +199,19 @@ int main1()
 		cp = linep;
 		word();
 	} while(*cp != '\n');
+	treec = 0;
 	if(gflg == 0) {
 		if(error == 0) {
 			setjmp(jmpbuf);
 			if (error)
 				return 1;
-			t = syntax(args, argp);
-		}
-		if(error != 0)
-			err("syntax error",255); else
+			if(!(t = syntax(args, argp))) {
+				if(error != 0)
+					err("syntax error",255);
+				return 1;
+			}
 			execute(t);
+		}
 	}
 }
 
@@ -270,7 +273,12 @@ pack:
 
 struct tree *tree()
 {
-	return(&t);
+	if(treec == TRESIZ) {
+		prs("Command line overflow\n");
+		error++;
+		longjmp(jmpbuf, 1);
+	}
+	return(&trebuf[treec++]);
 }
 
 int getc()
@@ -344,9 +352,10 @@ int readc()
 	}
 	if (onelflg==1)
 		exit(255);
-	if((rdstat = read(0, &cc, 1)) != 1)
+	if((rdstat = read(0, &cc, 1)) != 1) {
 		if(rdstat==0) exit(errval); /* end of file*/
 		else exit(255); /* error */
+	}
 	if (cc=='\n' && onelflg)
 		onelflg--;
 	return(cc);
@@ -382,7 +391,7 @@ struct tree *syn1(p1, p2)
 char **p1, **p2;
 {
 	register char **p;
-	register struct tree *t = tree();
+	register struct tree *t;
 	int l;
 	extern struct tree *syn2();
 
@@ -402,13 +411,20 @@ char **p1, **p2;
 	case ';':
 	case '\n':
 		if(l == 0) {
+			register struct tree *t1;
+
 			l = **p;
+			t = tree();
 			t->t_dtyp = TLST;
-			syn2(p1, p);
+			t->t_dlef = syn2(p1, p);
 			t->t_dflg = 0;
-			if(l == '&')
+			if(l == '&') {
+				t1 = t->t_dlef;
 				t->t_dflg |= FAND|FPRS|FINT;
-			syntax(p+1, p2);
+			}
+			if((t1 = syntax(p+1, p2)))
+				t->t_drit = t1; else
+				t->t_drit = 0;
 			return(t);
 		}
 	}
@@ -429,7 +445,7 @@ char **p1, **p2;
 {
 	register char **p;
 	register int l;
-	register struct tree *t = tree();
+	register struct tree *t;
 	extern struct tree *syn3();
 
 	l = 0;
@@ -447,9 +463,10 @@ char **p1, **p2;
 	case '|':
 	case '^':
 		if(l == 0) {
+			t = tree();
 			t->t_dtyp = TFIL;
-			syn3(p1, p);
-			syn2(p+1, p2);
+			t->t_dlef = syn3(p1, p);
+			t->t_drit = syn2(p+1, p2);
 			t->t_dflg = 0;
 			return(t);
 		}
@@ -468,7 +485,7 @@ char **p1, **p2;
 {
 	register char **p;
 	char **lp, **rp, *i, *o;
-	register struct tree *t = tree();
+	register struct tree *t;
 	int n, l, c, flg;
 
 	flg = 0;
@@ -528,29 +545,26 @@ char **p1, **p2;
 	default:
 		if(l == 0)
 			p1[n++] = *p;
-		if(n == sizeof t->t_dcom / sizeof *t->t_dcom) {
-			prs("Command line overflow\n");
-			error++;
-			longjmp(jmpbuf, 1);
-		}
 	}
 	if(lp != 0) {
 		if(n != 0)
 			error++;
+		t = tree();
 		t->t_dtyp = TPAR;
-		syn1(lp, rp);
+		*(struct tree **) &t->t_dspr = syn1(lp, rp);
 		goto out;
 	}
 	if(n == 0)
 		error++;
 	p1[n++] = 0;
+	t = tree();
 	t->t_dtyp = TCOM;
 	for(l=0; l<n; l++)
 		t->t_dcom[l] = p1[l];
 out:
 	t->t_dflg = flg;
-	t->t_dlef = i;
-	t->t_drit = o;
+	*(char **) &t->t_dlef = i;
+	*(char **) &t->t_drit = o;
 	return(t);
 }
 
@@ -630,7 +644,7 @@ int *pf1, *pf2;
 			return 1;
 		}
 		if(equal(cp1, "wait")) {
-			pwait(-1, 0);
+			pwait(-1);
 			return 1;
 		}
 		if(equal(cp1, ":"))
@@ -657,7 +671,7 @@ int *pf1, *pf2;
 			if((f&FAND) != 0)
 				return 1;
 			if((f&FPOU) == 0)
-				pwait(i, t);
+				pwait(i);
 			return 1;
 		}
 		if(t->t_dlef != 0) {
@@ -700,7 +714,7 @@ int *pf1, *pf2;
 			close(pf2[0]);
 			close(pf2[1]);
 		}
-		if((f&FINT)!=0 && *t->t_dlef==0 && (f&FPIN)==0) {
+		if((f&FINT)!=0 && t->t_dlef==0 && (f&FPIN)==0) {
 			close(0);
 			open("/dev/null", 0);
 		}
@@ -709,7 +723,7 @@ int *pf1, *pf2;
 			signal(QUIT, 0);
 		}
 		if(t->t_dtyp == TPAR) {
-			if((t1 = t))
+			if((t1 = (struct tree *) t->t_dspr))
 				t1->t_dflg |= f&FINT;
 			execute(t1);
 			exit(255);
@@ -755,20 +769,20 @@ int *pf1, *pf2;
 	case TFIL:
 		f = t->t_dflg;
 		pipe(pv);
-		t1 = t;
+		t1 = t->t_dlef;
 		t1->t_dflg |= FPOU | (f&(FPIN|FINT|FPRS));
 		execute(t1, pf1, pv);
-		t1 = t;
+		t1 = t->t_drit;
 		t1->t_dflg |= FPIN | (f&(FPOU|FINT|FAND|FPRS));
 		execute(t1, pv, pf2);
 		return 1;
 
 	case TLST:
 		f = t->t_dflg&FINT;
-		if((t1->t_dlef = t->t_dlef))
+		if((t1 = t->t_dlef))
 			t1->t_dflg |= f;
 		execute(t1);
-		if((t1->t_drit = t->t_drit))
+		if((t1 = t->t_drit))
 			t1->t_dflg |= f;
 		execute(t1);
 		return 1;
@@ -869,7 +883,7 @@ char *as1, *as2;
 }
 
 int pwait(i, t)
-int i, *t;
+int i;
 {
 	register int p, e;
 	int s;
