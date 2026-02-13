@@ -64,21 +64,37 @@
 #define TFIL 3
 #define TLST 4
 #define DTYP t_dtyp
-#define DLEF t_dlef
-#define DRIT t_drit
+#define DLEF t_dlef.t_dltr
+#define DRIT t_drit.t_drtr
 #define DFLG t_dflg
-#define DSPR t_dspr
-#define DCOM t_dcom
+#define DARR t_dcom.t_darr
+#define DPTR t_dcom.t_dptr
+#define DSPT t_dspr.t_dptr
+#define DSTR t_dspr.t_dtre
+#define DLPT t_dlef.t_dlpt
+#define DRPT t_drit.t_drpt
 #define	ENOMEM	12
 #define	ENOEXEC 8
 
 struct tree {
-  int t_dtyp,
-      t_dflg;
-  struct tree *t_dlef,
-	      *t_drit;
-  char *t_dspr,
-       *t_dcom[TRESIZ];
+  int t_dtyp;
+  int t_dflg;
+  union {
+    struct tree *t_dltr;
+    char *t_dlpt;
+  } t_dlef;
+  union {
+    struct tree *t_drtr;
+    char *t_drpt;
+  } t_drit;
+  union {
+    char *t_dptr;
+    struct tree *t_dtre;
+  } t_dspr;
+  union {
+    char *t_dptr;
+    char *t_darr[TRESIZ];
+  } t_dcom;
 } trebuf[TRESIZ];
 int treec;
 int errval;
@@ -554,7 +570,7 @@ char **p1, **p2;
 			error++;
 		t = tree();
 		t->DTYP = TPAR;
-		*(struct tree **) &t->DSPR = syn1(lp, rp);
+		t->DSPT = syn1(lp, rp);
 		goto out;
 	}
 	if(n == 0)
@@ -563,11 +579,11 @@ char **p1, **p2;
 	t = tree();
 	t->DTYP = TCOM;
 	for(l=0; l<n; l++)
-		t->DCOM[l] = p1[l];
+		t->DARR[l] = p1[l];
 out:
 	t->DFLG = flg;
-	*(char **) &t->DLEF = i;
-	*(char **) &t->DRIT = o;
+	t->DLPT = i;
+	t->DRPT = o;
 	return(t);
 }
 
@@ -577,7 +593,7 @@ int (*f)();
 {
 	register char *p, **t, c;
 
-	t = at->DCOM;
+	t = at->DARR;
 	while((p = *t++))
 		while((c = *p))
 			*p++ = (*f)(c);
@@ -613,10 +629,10 @@ int *pf1, *pf2;
 	switch(t->DTYP) {
 
 	case TCOM:
-		cp1 = *t->DCOM;
+		cp1 = *t->DARR;
 		if(equal(cp1, "chdir")) {
-			if(t->DCOM[1] != 0) {
-				if(chdir(t->DCOM[1]) < 0)
+			if(t->DARR[1] != 0) {
+				if(chdir(t->DARR[1]) < 0)
 					err("chdir: bad directory",255);
 			} else
 				err("chdir: arg count",255);
@@ -634,14 +650,14 @@ int *pf1, *pf2;
 		}
 		if(equal(cp1, "login")) {
 			if(promp != 0) {
-				execv("/bin/login", t->DCOM);
+				execv("/bin/login", t->DARR);
 			}
 			prs("login: cannot execute\n");
 			return 1;
 		}
 		if(equal(cp1, "newgrp")) {
 			if(promp != 0) {
-				execv("/bin/newgrp", t->DCOM);
+				execv("/bin/newgrp", t->DARR);
 			}
 			prs("newgrp: cannot execute\n");
 			return 1;
@@ -726,7 +742,7 @@ int *pf1, *pf2;
 			signal(QUIT, 0);
 		}
 		if(t->DTYP == TPAR) {
-			if((t1 = (struct tree *) t->DSPR))
+			if((t1 = t->DSTR))
 				t1->DFLG |= f&FINT;
 			execute(t1);
 			exit(255);
@@ -734,8 +750,8 @@ int *pf1, *pf2;
 		gflg = 0;
 		scan(t, tglob);
 		if(gflg) {
-			t->DSPR = "/etc/glob";
-			execv(t->DSPR, t->DSPR);
+			t->DSTR = "/etc/glob";
+			execv(t->DSTR, t->DSTR);
 			prs("glob: cannot execute\n");
 			exit(255);
 		}
@@ -744,14 +760,14 @@ int *pf1, *pf2;
 
 			scan(t, trim);
 			*linep = 0;
-			texec(t->DCOM, t);
+			texec(t->DARR, t);
 			cp1 = linep;
 			cp2 = getenv("PATH");
 			while((*cp1 = *cp2++)) {
 				p++;
 				if(*cp1 == ':') {
 					*cp1++ = '/';
-					cp2 = *t->DCOM;
+					cp2 = *t->DARR;
 					while((*cp1++ = *cp2++));
 					texec(linep, t);
 					cp1 = linep;
@@ -761,10 +777,10 @@ int *pf1, *pf2;
 				cp1++;
 			}
 			*cp1++ = '/';
-			cp2 = *t->DCOM;
+			cp2 = *t->DARR;
 			while((*cp1++ = *cp2++));
 			texec(linep, t);
-			prs(*t->DCOM);
+			prs(*t->DARR);
 			err(": not found",255);
 			exit(255);
 		}
@@ -801,17 +817,17 @@ struct tree *at;
 	register struct tree *t;
 
 	t = at;
-	execv(f, t->DCOM);
+	execv(f, t->DARR);
 	if (errno==ENOEXEC) {
 		if (*linep)
-			*(char **) &t->DCOM = linep;
-		t->DSPR = "/usr/bin/osh";
-		execv(t->DSPR, t->DSPR);
+			t->DPTR = linep;
+		t->DSTR = "/usr/bin/osh";
+		execv(t->DSTR, t->DSTR);
 		prs("No shell!\n");
 		exit(255);
 	}
 	if (errno==ENOMEM) {
-		prs(*t->DCOM);
+		prs(*t->DARR);
 		err(": too large",255);
 		exit(255);
 	}
