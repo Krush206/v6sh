@@ -45,6 +45,12 @@
 
 #include <setjmp.h>
 #include <errno.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <signal.h>
+
 #define	INTR	2
 #define	QUIT	3
 #define LINSIZ 1000
@@ -140,9 +146,29 @@ char	*mesg[] = {
 char	line[LINSIZ];
 char	*args[ARGSIZ];
 
-int main(c, av)
-int c;
-char **av;
+static int main1();
+static int word();
+static struct tree *tree();
+static int getc();
+static int readc();
+static struct tree *syntax(char **p1, char **p2);
+static struct tree *syn1(char **p1, char **p2);
+static struct tree *syn2(char **p1, char **p2);
+static struct tree *syn3(char **p1, char **p2);
+static int scan(struct tree *at, int (*f)());
+static int tglob(int c);
+static int trim(int c);
+static int execute(struct tree *t, int *pf1, int *pf2);
+static int texec(char *f, struct tree *at);
+static int err(char *s, int exitno);
+static int prs(char *as);
+static int putc(int c);
+static int prn(int n);
+static int any(int c, char *as);
+static int equal(char *as1, char *as2);
+static int pwait(int i);
+
+int main(int c, char **av)
 {
 	register int f;
 	register char *acname, **v;
@@ -188,8 +214,8 @@ char **av;
 	}
 	setintr = 0;
 	if(execflg) {
-		signal(QUIT, 1);
-		signal(INTR, 1);
+		signal(SIGQUIT, SIG_DFL);
+		signal(SIGINT, SIG_DFL);
 		if (arginp==0&&onelflg==0)
 			setintr++;
 	}
@@ -204,11 +230,10 @@ loop:
 	goto loop;
 }
 
-int main1()
+static int main1()
 {
 	register char  *cp;
 	register struct tree *t;
-	extern struct tree *syntax();
 
 	argp = args;
 	eargp = args+ARGSIZ-1;
@@ -230,11 +255,11 @@ int main1()
 		}
 		if(error != 0)
 			err("syntax error",255); else
-			execute(t);
+			execute(t, 0, 0);
 	}
 }
 
-int word()
+static int word()
 {
 	register char c, c1;
 
@@ -290,7 +315,7 @@ pack:
 	}
 }
 
-struct tree *tree()
+static struct tree *tree()
 {
 	if(treec == TRESIZ) {
 		prs("Command line overflow\n");
@@ -300,7 +325,7 @@ struct tree *tree()
 	return(&trebuf[treec++]);
 }
 
-int getc()
+static int getc()
 {
 	register char c;
 
@@ -354,7 +379,7 @@ getd:
 	return(c&0177);
 }
 
-int readc()
+static int readc()
 {
 	int rdstat;
 	char cc;
@@ -386,11 +411,8 @@ int readc()
  *	syn1
  */
 
-struct tree *syntax(p1, p2)
-char **p1, **p2;
+static struct tree *syntax(char **p1, char **p2)
 {
-	extern struct tree *syn1();
-
 	while(p1 != p2) {
 		if(any(**p1, ";&\n"))
 			p1++; else
@@ -406,13 +428,11 @@ char **p1, **p2;
  *	syn2 ; syntax
  */
 
-struct tree *syn1(p1, p2)
-char **p1, **p2;
+static struct tree *syn1(char **p1, char **p2)
 {
 	register char **p;
 	register struct tree *t;
 	int l;
-	extern struct tree *syn2();
 
 	l = 0;
 	for(p=p1; p!=p2; p++)
@@ -459,13 +479,11 @@ char **p1, **p2;
  *	syn3 | syn2
  */
 
-struct tree *syn2(p1, p2)
-char **p1, **p2;
+static struct tree *syn2(char **p1, char **p2)
 {
 	register char **p;
 	register int l;
 	register struct tree *t;
-	extern struct tree *syn3();
 
 	l = 0;
 	for(p=p1; p!=p2; p++)
@@ -499,8 +517,7 @@ char **p1, **p2;
  *	word word* [ < in ] [ > out ]
  */
 
-struct tree *syn3(p1, p2)
-char **p1, **p2;
+static struct tree *syn3(char **p1, char **p2)
 {
 	register char **p;
 	char **lp, **rp, *i, *o;
@@ -570,7 +587,7 @@ char **p1, **p2;
 			error++;
 		t = tree();
 		t->DTYP = TPAR;
-		t->DSPT = syn1(lp, rp);
+		t->DSTR = syn1(lp, rp);
 		goto out;
 	}
 	if(n == 0)
@@ -587,9 +604,7 @@ out:
 	return(t);
 }
 
-int scan(at, f)
-struct tree *at;
-int (*f)();
+static int scan(struct tree *at, int (*f)())
 {
 	register char *p, **t, c;
 
@@ -599,8 +614,7 @@ int (*f)();
 			*p++ = (*f)(c);
 }
 
-int tglob(c)
-int c;
+static int tglob(int c)
 {
 
 	if(any(c, "[?*"))
@@ -608,22 +622,17 @@ int c;
 	return(c);
 }
 
-int trim(c)
-int c;
+static int trim(int c)
 {
 
 	return(c&0177);
 }
 
-int execute(t, pf1, pf2)
-struct tree *t;
-int *pf1, *pf2;
+static int execute(struct tree *t, int *pf1, int *pf2)
 {
 	int i, f, pv[2];
 	register struct tree *t1;
 	register char *cp1, *cp2;
-	extern int errno;
-	extern char *getenv();
 
 	if(t != 0)
 	switch(t->DTYP) {
@@ -695,24 +704,24 @@ int *pf1, *pf2;
 		}
 		if(t->DLEF != 0) {
 			close(0);
-			i = open(t->DLEF, 0);
+			i = open(t->DLPT, 0);
 			if(i < 0) {
-				prs(t->DLEF);
+				prs(t->DLPT);
 				err(": cannot open",255);
 				exit(255);
 			}
 		}
 		if(t->DRIT != 0) {
 			if((f&FCAT) != 0) {
-				i = open(t->DRIT, 1);
+				i = open(t->DRPT, 1);
 				if(i >= 0) {
 					lseek(i, 0L, 2);
 					goto f1;
 				}
 			}
-			i = creat(t->DRIT, 0666);
+			i = creat(t->DRPT, 0666);
 			if(i < 0) {
-				prs(t->DRIT);
+				prs(t->DRPT);
 				err(": cannot create",255);
 				exit(255);
 			}
@@ -738,20 +747,20 @@ int *pf1, *pf2;
 			open("/dev/null", 0);
 		}
 		if((f&FINT) == 0 && setintr) {
-			signal(INTR, 0);
-			signal(QUIT, 0);
+			signal(SIGINT, SIG_IGN);
+			signal(SIGQUIT, SIG_IGN);
 		}
 		if(t->DTYP == TPAR) {
 			if((t1 = t->DSTR))
 				t1->DFLG |= f&FINT;
-			execute(t1);
+			execute(t1, pf1, pf2);
 			exit(255);
 		}
 		gflg = 0;
 		scan(t, tglob);
 		if(gflg) {
-			t->DSTR = "/etc/glob";
-			execv(t->DSTR, t->DSTR);
+			t->DSPT = "/etc/glob";
+			execv(t->DSPT, &t->DSPT);
 			prs("glob: cannot execute\n");
 			exit(255);
 		}
@@ -760,7 +769,7 @@ int *pf1, *pf2;
 
 			scan(t, trim);
 			*linep = 0;
-			texec(t->DARR, t);
+			texec(t->DPTR, t);
 			cp1 = linep;
 			cp2 = getenv("PATH");
 			while((*cp1 = *cp2++)) {
@@ -800,20 +809,17 @@ int *pf1, *pf2;
 		f = t->DFLG&FINT;
 		if((t1 = t->DLEF))
 			t1->DFLG |= f;
-		execute(t1);
+		execute(t1, pf1, pf2);
 		if((t1 = t->DRIT))
 			t1->DFLG |= f;
-		execute(t1);
+		execute(t1, pf1, pf2);
 		return 1;
 
 	}
 }
 
-int texec(f, at)
-char *f;
-struct tree *at;
+static int texec(char *f, struct tree *at)
 {
-	extern int errno;
 	register struct tree *t;
 
 	t = at;
@@ -821,8 +827,8 @@ struct tree *at;
 	if (errno==ENOEXEC) {
 		if (*linep)
 			t->DPTR = linep;
-		t->DSTR = "/usr/bin/osh";
-		execv(t->DSTR, t->DSTR);
+		t->DSPT = "/usr/bin/osh";
+		execv(t->DSPT, &t->DSPT);
 		prs("No shell!\n");
 		exit(255);
 	}
@@ -833,9 +839,7 @@ struct tree *at;
 	}
 }
 
-int err(s, exitno)
-char *s;
-int exitno;
+static int err(char *s, int exitno)
 {
 
 	prs(s);
@@ -846,8 +850,7 @@ int exitno;
 	}
 }
 
-int prs(as)
-char *as;
+static int prs(char *as)
 {
 	register char *s;
 
@@ -856,8 +859,7 @@ char *as;
 		putc(*s++);
 }
 
-int putc(c)
-int c;
+static int putc(int c)
 {
 	char cc;
 
@@ -865,8 +867,7 @@ int c;
 	write(2, &cc, 1);
 }
 
-int prn(n)
-int n;
+static int prn(int n)
 {
 	register int a;
 
@@ -875,9 +876,7 @@ int n;
 	putc(n%10 + '0');
 }
 
-int any(c, as)
-int c;
-char *as;
+static int any(int c, char *as)
 {
 	register char *s;
 
@@ -888,8 +887,7 @@ char *as;
 	return(0);
 }
 
-int equal(as1, as2)
-char *as1, *as2;
+static int equal(char *as1, char *as2)
 {
 	register char *s1, *s2;
 
@@ -901,8 +899,7 @@ char *as1, *as2;
 	return(0);
 }
 
-int pwait(i, t)
-int i;
+static int pwait(int i)
 {
 	register int p, e;
 	int s;
