@@ -168,7 +168,7 @@ static int any(int, char *);
 static int equal(char *, char *);
 static void pwait(int);
 
-static int
+int
 main(int c, char *av[])
 {
 	register int f;
