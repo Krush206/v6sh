@@ -112,9 +112,8 @@ char	*linep;
 char	*elinep;
 char	**argp;
 char	**eargp;
-typedef intptr_t treeword_t;
-treeword_t *treep;
-treeword_t *treeend;
+struct tree *treep;
+struct tree *treeend;
 char	peekc;
 char	gflg;
 char	error;
@@ -129,10 +128,8 @@ int	exitcode;
 char	exitstr[6] ;
 char	*seta[26];
 char	*endcore, *endptr;
-void (*oldintr)(int);	/* save INTR state existing at start */
 int	wasintr;
 char	gointr[32];
-static int catchintr();
 char	proflag;	/* 1 ==> inside .profile */
 			/* 2 ==> interrupt in .profile */
 char	redirf;	/* 1 ==> I/O redirection of input; controls pump rebuffering */
@@ -264,13 +261,13 @@ static char *logtty(), *nxtarg(), *sname();
 static char *pwb_logname(void);
 static char *logdir(void);
 static char *itoa(int);
-static treeword_t *tree(int);
-static treeword_t *syntax(char **, char **);
-static treeword_t *syn1(char **, char **);
-static treeword_t *syn1a(char **, char **);
-static treeword_t *syn1b(char **, char **);
-static treeword_t *syn2(char **, char **);
-static treeword_t *syn3(char **, char **);
+static struct tree *tree(int);
+static struct tree *syntax(char **, char **);
+static struct tree *syn1(char **, char **);
+static struct tree *syn1a(char **, char **);
+static struct tree *syn1b(char **, char **);
+static struct tree *syn2(char **, char **);
+static struct tree *syn3(char **, char **);
 static char *rdval(int, char *, char *);
 static char *pcat(char *, char *, char *, int);
 static char *pexline(char *, char *, int, char **, char **);
@@ -283,6 +280,8 @@ static int setxcod(), copy(), copyn(), pwb_exp(), e1(), e2(), e3(), tio();
 static int search(), getword(), readc(), eoferr(), bflush(), bsynch(), bseek();
 static int setwhere(), pexinit(), etcglob(), expand(), sort(), match(), amatch();
 static int umatch(), compar(), gdie();
+static int catchintr(void);
+static void (*oldintr)(int);	/* save INTR state existing at start */
 
 /*	following items implement while -- end stack of WDEEP levels */
 #define	WDEEP	3
@@ -328,11 +327,9 @@ static char *logdir(void)
 	return "/";
 }
 
-main(c, av)
-int c;
-char **av;
+main(int c, char *argv[])
 {
-	register f;
+	register int f;
 	register char *p, **v;
 	copy(itoa(getpid()), pidp);
 	copy("/dev/tty",devtty);
@@ -438,12 +435,12 @@ loop:
 
 char line[LINSIZ];
 
-static main1()
+static void main1(void)
 {
 	char *args[ARGSIZ];
-	treeword_t trebuf[TRESIZ];
+	struct tree trebuf[TRESIZ];
 	register char c, *cp;
-	register treeword_t *t;
+	register struct tree *t;
 
 	argp = args;
 	eargp = args+ARGSIZ-5;
@@ -482,7 +479,7 @@ static main1()
 }
 
 
-static word()
+static void word(void)
 {
 	register char c, c1;
 	register dolflag;
@@ -561,9 +558,9 @@ pack:
 }
 
 
-static treeword_t *tree(int n)
+static struct tree *tree(int n)
 {
-	register treeword_t *t;
+	register struct tree *t;
 
 	t = treep;
 	treep += n;
@@ -656,7 +653,7 @@ getd:
  *	syn1
  */
 
-static treeword_t *syntax(p1, p2)
+static struct tree *syntax(p1, p2)
 register char **p1, **p2;
 {
 
@@ -677,11 +674,11 @@ register char **p1, **p2;
  *	syn1a ; syntax
  */
 
-static treeword_t *syn1(p1, p2)
+static struct tree *syn1(p1, p2)
 char **p1, **p2;
 {
 	register char **p;
-	register treeword_t *t, *t1;
+	register struct tree *t, *t1;
 	int l;
 
 	l = 0;
@@ -729,12 +726,12 @@ char **p1, **p2;
  *	syn1b || syn1a
  */
 
-static treeword_t *syn1a(p1,p2)
+static struct tree *syn1a(p1,p2)
 char **p1, **p2;
 {
 	register char **p;
 	register int l;
-	register treeword_t *t;
+	register struct tree *t;
 
 	l = 0;
 	for(p=p1; p!=p2; p++)
@@ -770,12 +767,12 @@ char **p1, **p2;
  *	syn2 && syn1b
  */
 
-static treeword_t *syn1b(p1,p2)
+static struct tree *syn1b(p1,p2)
 char **p1, **p2;
 {
 	register char **p;
 	register int l;
-	register treeword_t *t;
+	register struct tree *t;
 
 	l = 0;
 	for(p=p1; p!=p2; p++)
@@ -809,7 +806,7 @@ char **p1, **p2;
  *	syn3 | syn2
  */
 
-static treeword_t *syn2(p1, p2)
+static struct tree *syn2(p1, p2)
 char **p1, **p2;
 {
 	register char **p;
@@ -848,12 +845,12 @@ char **p1, **p2;
  *	word word* [ < in ] [ > out ]
  */
 
-static treeword_t *syn3(p1, p2)
+static struct tree *syn3(p1, p2)
 char **p1, **p2;
 {
 	register char **p;
 	char **lp, **rp;
-	register treeword_t *t;
+	register struct tree *t;
 	int n, l, i, o, c, flg;
 
 	flg = 0;
@@ -938,11 +935,11 @@ char **p1, **p2;
 
 
 static scan(at, f)
-treeword_t *at;
+struct tree *at;
 int (*f)();
 {
 	register char *p;
-	register treeword_t *t;
+	register struct tree *t;
 
 	t = at+DCOM;
 	while(p = *t++)
@@ -974,11 +971,11 @@ char	**av;		/* av[0] = t[DCOM] */
 int	*savdlef;	/* for cmd piped into, has &t for cmd on other end */
 
 static execute(t, pf1, pf2)
-treeword_t *t;
+struct tree *t;
 int *pf1, *pf2;
 {
 	int i, f, pv[2], wt;
-	register treeword_t *t1;
+	register struct tree *t1;
 	register char *cp1, *cp2;
 
 tryagain:	/* if expr command may come back here to do command */
@@ -1461,7 +1458,7 @@ static fclean()
 }
 
 static texec(f, t)
-register treeword_t *t;
+register struct tree *t;
 {
 	extern errno;
 	register char *cp;
@@ -1787,7 +1784,7 @@ int i, *t;
 
 
 static pwb_acct(t)
-treeword_t *t;
+struct tree *t;
 {
 	if(t == 0)
 		enacct("**gok", 0);
@@ -2289,8 +2286,8 @@ register btarg;
 }
 
 /*	bseek: seek, staying within current input buffer b, if possible */
-static bseek(where)
-long where;
+static int
+bseek(long where)
 {
 	long bend;
 	if (promp || bnread == 1 || redirf)
@@ -2309,8 +2306,7 @@ long where;
 }
 
 /*	sname: simple name (last component) of file name */
-static char *sname(s)
-register char *s;
+static char *sname(char *s)
 {
 	register char *p;
 	for(p = s; *p;)
@@ -2321,7 +2317,8 @@ register char *s;
 
 /*	setwhere: set up wherev for $w (1st component of pathname) */
 char	wherev[6];
-static setwhere()
+static int
+setwhere(void)
 {
 	register char *s, *w;
 	register i;
@@ -2338,7 +2335,8 @@ static setwhere()
  *	may be invoked before fork to avoid unnecessary .path opening.
  *	returns 0 if OK, -1 if any error.
  */
-static pexinit()
+static int
+pexinit(void)
 {
 	char pathbuf[128 + 16];
 	register n, f;
@@ -2373,10 +2371,12 @@ static pexinit()
  *	return 0 if OK (or not present), -1 if runs off end in middle of line
  *	or if line too long.
  */
-static char *pexline(ptr, ptrlim, psize, pret, pnext)
-register char *ptr, *ptrlim;
-int psize;
-char **pret, **pnext;
+static char *
+pexline(register char *ptr,
+	register char *ptrlim,
+	int psize,
+	char **pret,
+	char **pnext)
 {
 	if (ptr >= ptrlim)
 		return(0);
@@ -2411,8 +2411,8 @@ char	*string;
 char	*ablimit;
 int	ncoll;
 
-static etcglob(argv)
-char *argv[];
+static int
+etcglob(char *argv[])
 {
 	char	ab[STRSIZ];		/* generated characters */
 	char	*avxa[500+DCOM];		/* generated arguments */
@@ -2429,8 +2429,8 @@ char *argv[];
 	xdie(avxa[DCOM], CANTEX);
 }
 
-static expand(as)
-char *as;
+static int
+expand(char *as)
 {
 	glob_t matches;
 	char **oavx;
@@ -2451,8 +2451,8 @@ char *as;
 	sort(oavx);
 }
 
-static sort(oavx)
-char **oavx;
+static int
+sort(char *oavx)
 {
 	register char **p1, **p2, **c;
 
@@ -2471,16 +2471,16 @@ char **oavx;
 }
 
 
-static match(s, p)
-char *s, *p;
+static int
+match(char *s, char *p)
 {
 	if (*s=='.' && *p!='.')
 		return(0);
 	return(amatch(s, p));
 }
 
-static amatch(as, ap)
-char *as, *ap;
+static int
+amatch(char *as, char *ap)
 {
 	register char *s, *p;
 	register scc;
@@ -2528,8 +2528,8 @@ char *as, *ap;
 	}
 }
 
-static umatch(s, p)
-char *s, *p;
+static int
+umatch(char *s, char *p)
 {
 	if(*p==0)
 		return(1);
@@ -2539,8 +2539,8 @@ char *s, *p;
 	return(0);
 }
 
-static compar(as1, as2)
-char *as1, *as2;
+static int
+compar(char *as1, char *as2)
 {
 	register char *s1, *s2;
 
@@ -2552,8 +2552,8 @@ char *as1, *as2;
 	return (*--s1 - *s2);
 }
 
-static char *cat(as1, as2)
-char *as1, *as2;
+static char *
+cat(char *as1, char *as2)
 {
 	register char *s1, *s2;
 	register int c;
@@ -2586,8 +2586,8 @@ char *as1, *as2;
  *	purpose is to make internal glob work same as external one.
  *	something should be done about match/nomatch actions.
  */
-static gdie(str)
-char *str;
+static void
+gdie(char *str)
 {
 	prs(ARG0); prs(": ");
 	prs(str); prs("\n");
