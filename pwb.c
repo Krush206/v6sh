@@ -46,12 +46,16 @@ static char SCCSID[] = "@(#)sh.c 2.44";
 #define TOR  5
 #define TAND 6
 
-#define DTYP 0
-#define DFLG 1
-#define DLEF 2
-#define DRIT 3
-#define DSPR 4
-#define DCOM 5
+#define DTYP t_dtyp
+#define DLEF t_dlef.t_dltr
+#define DRIT t_drit.t_drtr
+#define DFLG t_dflg
+#define DARR t_dcom.t_darr
+#define DPTR t_dcom.t_dptr
+#define DSPT t_dspr.t_dptr
+#define DSTR t_dspr.t_dtre
+#define DLPT t_dlef.t_dlpt
+#define DRPT t_drit.t_drpt
 #define N 'n'-'a'
 #define P 'p'-'a'
 #define R 'r'-'a'
@@ -61,15 +65,6 @@ static char SCCSID[] = "@(#)sh.c 2.44";
 #define Z 'z'-'a'
 #define DOLREPL 1
 #define DOLREPQ	2
-
-#define seek(fd, offset, whence) lseek((fd), (offset), (whence))
-#define tell(fd) lseek((fd), 0, SEEK_CUR)
-#define IFMT S_IFMT
-#define IFDIR S_IFDIR
-#define acct pwb_acct
-#define atoi pwb_atoi
-#define exp pwb_exp
-#define logname pwb_logname
 
 static jmp_buf error_jmp;
 #define setexit() setjmp(error_jmp)
@@ -98,6 +93,27 @@ static int bnread = BSIZ;	/* must change to 1 if found to be in pipe */
 
 #define ACNAME	"/etc/sha"
 
+static struct tree {
+  int t_dtyp;
+  int t_dflg;
+  union {
+    struct tree *t_dltr;
+    char *t_dlpt;
+  } t_dlef;
+  union {
+    struct tree *t_drtr;
+    char *t_drpt;
+  } t_drit;
+  union {
+    char *t_dptr;
+    struct tree *t_dtre;
+  } t_dspr;
+  union {
+    char *t_dptr;
+    char *t_darr[TRESIZ];
+  } t_dcom;
+} trebuf[TRESIZ];
+int treec;
 static char	*dolp;
 static int	idolp;
 static int	oldfil0;	/* fildes for original file 0 */
@@ -255,11 +271,13 @@ static struct {
 	long bsyst;
 } tbuf;
 
-static char *logtty(), *nxtarg(), *sname();
-static char *pwb_logname(void);
+static char *logtty(void);
+static char *logname(void);
 static char *logdir(void);
 static char *itoa(int);
-static struct tree *tree(int);
+static char *sname(char *);
+static char *nxtarg(void);
+static struct tree *tree(void);
 static struct tree *syntax(char **, char **);
 static struct tree *syn1(char **, char **);
 static struct tree *syn1a(char **, char **);
@@ -270,15 +288,58 @@ static char *rdval(int, char *, char *);
 static char *pcat(char *, char *, char *, int);
 static char *pexline(char *, char *, int, char **, char **);
 static char *cat(char *, char *);
-static int main1(), word(), getc(), scan(), tglob(), trim(), execute();
-static int toend(), lookup(), dofork(), fclean(), texec(), catchpipe(), catchintr();
-static int dopump(), pwb_atoi(), xdie(), die(), err(), prs(), putc();
-static int any(), eq(), initacct(), pwait(), pwb_acct(), enacct();
-static int setxcod(), copy(), copyn(), pwb_exp(), e1(), e2(), e3(), tio();
-static int search(), getword(), readc(), eoferr(), bflush(), bsynch(), bseek();
-static int setwhere(), pexinit(), etcglob(), expand(), sort(), match(), amatch();
-static int umatch(), compar(), gdie();
-static int catchintr(void);
+static void main1(void);
+static void word(void);
+static int getc(int);
+static void scan(struct tree *, int (*)(void));
+static void tglob(char *);
+static int trim(char *);
+static void execute(struct tree *, int *, int *);
+static void toend(void);
+static int lookup(char *);
+static int dofork(void);
+static void fclean(void);
+static void texec(char *, struct tree *);
+static void catchpipe(void);
+static void catchintr(void);
+static void dopump(char **);
+static int atoi(char *);
+static void xdie(char *, char *);
+static void die(char *, char *);
+static void err(char *);
+static void prs(char *);
+static void putc(int);
+static int any(char, char *);
+static int eq(char *, char *);
+static void initacct(void);
+static void pwait(int, int *);
+static int acct(struct tree *);
+static void enacct(char *, int);
+static void setxcod(int);
+static void copy(char *, char *);
+static void copyn(char *, char *, int);
+static int exp(void);
+static int e1(void);
+static int e2(void);
+static int e3(void);
+static int tio(char *, int);
+static int search(int, int);
+static int getword(char *);
+static int readc(void);
+static int eoferr(void);
+static int bflush(void);
+static int bsynch(int);
+static int bseek(long);
+static int setwhere(void);
+static int pexinit(void);
+static int etcglob(char *[]);
+static int expand(char *);
+static int sort(char *);
+static int match(char *, char *);
+static int amatch(char *, char *);
+static int umatch(char *, char *);
+static int compar(char *, char *);
+static int gdie(char *);
 static void (*oldintr)(int);	/* save INTR state existing at start */
 
 /*	following items implement while -- end stack of WDEEP levels */
@@ -643,7 +704,7 @@ getd:
  */
 
 static struct tree *
-syn1(register char **p1, register char **p2)
+syntax(register char **p1, register char **p2)
 {
 
 	while(p1 != p2) {
@@ -959,7 +1020,7 @@ static char	**av;		/* av[0] = t[DCOM] */
 static int	*savdlef;	/* for cmd piped into, has &t for cmd on other end */
 
 static void
-execute(struct tree *t, int *pf1, int pf2*)
+execute(struct tree *t, int *pf1, int *pf2)
 {
 	int i, f, pv[2], wt;
 	register struct tree *t1;
@@ -1438,7 +1499,7 @@ dofork(void)
 }
 
 static void
-flclean(void)
+fclean(void)
 {
 	if (acctf)
 		close(acctf);
@@ -1884,7 +1945,7 @@ pcat(register char *so1,
 
 
 static void
-setxcode(int code)
+setxcod(int code)
 {
 	copy(itoa(code), exitstr);
 	seta[R] = exitstr;
@@ -2594,4 +2655,15 @@ gdie(char *str)
 	prs(ARG0); prs(": ");
 	prs(str); prs("\n");
 	exit(1);
+}
+
+static struct tree *
+tree(void)
+{
+	if(treec == TRESIZ) {
+		prs("Command line overflow\n");
+		error++;
+		longjmp(jmpbuf, 1);
+	}
+	return(&trebuf[treec++]);
 }
