@@ -1532,8 +1532,8 @@ static catchpipe()
  *	eofstr is safe because initial arg can't be at beginning
  */
 
-static dopump(t)
-register char **t;
+static void
+dopump(register char **t)
 {
 #define	eofstr	line
 #define	pumpwk	(line+96)
@@ -1596,8 +1596,8 @@ register char **t;
 	exit(pipebomb);
 }
 
-static pwb_atoi(s)
-char *s;
+static int
+atoi(char *s)
 {
 
 	register char *sp;
@@ -1622,29 +1622,28 @@ char *s;
 	return neg? -i: i;
 }
 
-static xdie(str1, str2)
-char *str1, *str2;
+static void
+xdie(char *str1, char *str2)
 {
 	die(str1, str2);
 	exit(1);
 }
 
-static die(str1, str2)
-char *str1, *str2;
+static void
+die(char *str1, char *str2)
 {
 	prs(ARG0);
 	prs(": ");
 	prs(str1);
 	err(str2);
-	return;
 }
 
 /*
  *	err: emit error message, flush input by seeking to EOF (but only
  *␁	if reading from 0 in unrestricted way), exit.
  */
-static err(s)
-char *s;
+static void
+err(char *s)
 {
 
 	prs(s);
@@ -1655,8 +1654,8 @@ char *s;
 }
 
 
-static prs(s)
-register char *s;
+static void
+prs(register char *s)
 {
 
 	if (s == 0)
@@ -1666,15 +1665,16 @@ register char *s;
 }
 
 
-static putc(c)
+static void
+putc(int c)
 {
 
 	write(2, &c, 1);
 }
 
 
-static any(c, s)
-register char c, *s;
+static int
+any(register char c, register char *s)
 {
 
 	while(*s)
@@ -1684,8 +1684,8 @@ register char c, *s;
 }
 
 
-static eq(s1, s2)
-register char *s1, *s2;
+static int
+eq(char *s1, char *s2)
 {
 
 	if (s1 == 0 || s2 == 0)
@@ -1709,9 +1709,10 @@ register char *s1, *s2;
 	PERMITS BETTER INTERNAL CMD HANDLING.
  */
 
-static initacct()
+static void
+initacct(void)
 {
-	register f;
+	register int f;
 	if ((acctf = open(ACNAME, 1)) < 0)
 		acctf = 0;	/* no acctg at all */
 	else {
@@ -1731,10 +1732,10 @@ static initacct()
 	return;
 }
 
-static pwait(i, t)
-int i, *t;
+static void
+pwait(int i, int *t)
 {
-	register p, e, *t1;
+	register int p, e, *t1;
 	int nprocs;
 	int s;
 
@@ -1783,8 +1784,8 @@ int i, *t;
 }
 
 
-static pwb_acct(t)
-struct tree *t;
+static int
+acct(struct tree *t)
 {
 	if(t == 0)
 		enacct("**gok", 0);
@@ -1795,12 +1796,12 @@ struct tree *t;
 }
 
 
-static enacct(as, acctype)
-char *as;
-int acctype;	/* 0 ==> child process, 1 ==> internal cmd */
+static void
+enacct(char *as, int acctype)
+/* 0 ==> child process, 1 ==> internal cmd */
 {
 	struct stime timbuf;
-	register i;
+	register int i;
 	register char *np;
 
 	if (uid == 0)
@@ -1832,10 +1833,8 @@ int acctype;	/* 0 ==> child process, 1 ==> internal cmd */
 }
 
 
-static char *rdval(pipef, lef, na)
-int pipef;
-char *lef;
-char *na;
+static char *
+rdval(int pipef, char *lef, char *na)
 {
 	register char *st, *np;
 	char c;
@@ -1865,7 +1864,9 @@ char *na;
 }
 
 
-static catchintr() {
+static void
+catchintr(void)
+{
 	if (proflag)
 		proflag++;	/* in .profile, make sure come out ok */
 	wasintr++;
@@ -1873,10 +1874,11 @@ static catchintr() {
 }
 
 
-static char *pcat(so1, so2, si, sz)
-register char *so1, *so2;
-char *si;
-int sz;
+static char *
+pcat(register char *so1,
+     register char *so2,
+     char *si,
+     int sz)
 {
 	register char *s;
 
@@ -1893,16 +1895,15 @@ int sz;
 }
 
 
-static setxcod(code)
-int code;
+static void
+setxcode(int code)
 {
 	copy(itoa(code), exitstr);
 	seta[R] = exitstr;
-	return;
 }
 
-static copy(source, sink)
-register char *source, *sink;
+static void
+copy(register char *source, register char *sink)
 {
 	 while(*sink++ = *source++ & 0177);
 }
@@ -1910,18 +1911,19 @@ register char *source, *sink;
 /*
  *	copyn: copy at most n bytes from source to sink.
  */
-static copyn(source, sink, n)
-register char *source, *sink;
-int	n;
+static void
+copyn(register char *source, register char *sink, int n)
 {
-	register i;
+	register int i;
 	for (i = 0; i < n; i++)
 		if (!(*sink++ = *source++))
 			break;
 }
 
-static char *itoa(n) {
-	register i, j;
+static char *
+itoa(int n)
+{
+	register int i, j;
 	register char *cp;
 	static char str[12];
 
@@ -1935,16 +1937,19 @@ static char *itoa(n) {
 	}
 }
 
-static char *nxtarg()
+static char *
+nxtarg(void)
 {
-	register iap;
+	register int iap;
 
 	if ((iap = ap++) > ac || av[iap] == 0)
 		return(0);
 	return trim(av[iap]);
 }
 
-static pwb_exp() {
+static int
+exp(void)
+{
 	int p1;
 
 	p1 = e1();
@@ -1953,7 +1958,9 @@ static pwb_exp() {
 	return(p1);
 }
 
-static e1() {
+static int
+e1(void)
+{
 	int p1;
 
 	p1 = e2();
@@ -1962,14 +1969,18 @@ static e1() {
 	return(p1);
 }
 
-static e2() {
+static int
+e2(void)
+{
 	if (eq(nxtarg(), "!"))
 		return(!e3());
 	ap--;
 	return(e3());
 }
 
-static e3() {
+static int
+e3(void)
+{
 	int ccode;
 	int nap;
 	int int1, int2;
@@ -2054,8 +2065,8 @@ erre3:
 	die(SYNTAX, p1);
 }
 
-static tio(a, f)
-char *a; int f;
+static int
+tio(char *a, int f)
 {
 	register int fil;
 
@@ -2076,8 +2087,8 @@ char *a; int f;
  *	ZBREAK: unmatched end (break, failed while or end)
  *	levinit = 0, except when called from else if ... then, when it is 1
  */
-static search(type, levinit)
-int type, levinit;
+static int
+search(int type, int levinit)
 {
 	register int level, t;
 	register char *aword;
@@ -2150,8 +2161,8 @@ int type, levinit;
 	return 1 if word, 0 if only newline left.
 */
 
-static getword(aword)
-char *aword;
+static int
+getword(char *aword)
 {
 	register int found;	/* 1 ==> found word, 0 ==> not */
 	register char c, *wp;
@@ -2184,9 +2195,10 @@ char *aword;
 	return(found);
 }
 
-static readc()
+static int
+readc(void)
 {
-	register c;
+	register int c;
 
 	if (arginp) {
 		if (arginp == 1)
@@ -2222,7 +2234,8 @@ static readc()
 }
 
 /*	eoferr: issue error message if cmd was in middle of search */
-static eoferr()
+static int
+eoferr(void)
 {
 	switch (COMTYPE) {
 	case ZGOTO:
@@ -2246,7 +2259,8 @@ static eoferr()
 }
 
 /*	bflush: complete input flush */
-static bflush()
+static int
+bflush(void)
 {
 	seek(0, 0, 2);
 	b.nleft = b.gotten = 0;
@@ -2255,10 +2269,10 @@ static bflush()
 
 /*	bsynch: synchronize internal buffering & outside world */
 /*	btarg gives nominal target value of bstate */
-static bsynch(btarg)
-register btarg;
+static int
+bsynch(register int btarg)
 {
-	register obstate;
+	register int obstate;
 	long f;
 	if (btarg == bstate || promp || bnread == 1 || redirf)
 		return;	/* no seeking in any of these cases */
@@ -2321,7 +2335,7 @@ static int
 setwhere(void)
 {
 	register char *s, *w;
-	register i;
+	register int i;
 	s = seta[S];
 	seta[W] = w = wherev;
 	i = 0;
@@ -2483,7 +2497,7 @@ static int
 amatch(char *as, char *ap)
 {
 	register char *s, *p;
-	register scc;
+	register int scc;
 	int c, cc, ok, lc;
 
 	s = as;
