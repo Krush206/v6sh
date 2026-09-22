@@ -286,7 +286,7 @@ static struct tree *syn2(char **, char **);
 static struct tree *syn3(char **, char **);
 static char *rdval(int, char *, char *);
 static char *pcat(char *, char *, char *, int);
-static char *pexline(char *, char *, int, char **, char **);
+static int pexline(char *, char *, int, char **, char **);
 static char *cat(char *, char *);
 static void main1(void);
 static void word(void);
@@ -334,12 +334,12 @@ static int setwhere(void);
 static int pexinit(void);
 static int etcglob(char *[]);
 static int expand(char *);
-static int sort(char *);
+static int sort(char **);
 static int match(char *, char *);
 static int amatch(char *, char *);
 static int umatch(char *, char *);
 static int compar(char *, char *);
-static int gdie(char *);
+static void gdie(char *);
 static void (*oldintr)(int);	/* save INTR state existing at start */
 
 /*	following items implement while -- end stack of WDEEP levels */
@@ -752,15 +752,15 @@ syn1(char **p1, char **p2)
 	case '\n':
 		if(l == 0) {
 			l = **p;
-			t = tree(4);
-			t[DTYP] = TLST;
-			t[DLEF] = syn1a(p1, p);
-			t[DFLG] = 0;
+			t = tree();
+			t->DTYP = TLST;
+			t->DLEF = syn1a(p1, p);
+			t->DFLG = 0;
 			if(l == '&') {
-				t1 = t[DLEF];
-				t1[DFLG] |= FAND|FPRS|FINT;
+				t1 = t->DLEF;
+				t1->DFLG |= FAND|FPRS|FINT;
 			}
-			t[DRIT] = syntax(p+1, p2);
+			t->DRIT = syntax(p+1, p2);
 			return(t);
 		}
 	}
@@ -799,11 +799,11 @@ syn1a(char **p1, char **p2)
 		if((*p)[1] == '\0')
 			continue;	/* a pipe not an or */
 		if(l == 0) {
-			t = tree(4);
-			t[DTYP] = TOR;
-			t[DLEF] = syn1b(p1, p);
-			t[DRIT] = syn1a(p+1, p2);
-			t[DFLG] = 0;
+			t = tree();
+			t->DTYP = TOR;
+			t->DLEF = syn1b(p1, p);
+			t->DRIT = syn1a(p+1, p2);
+			t->DFLG = 0;
 			return(t);
 		}
 	}
@@ -838,11 +838,11 @@ syn1b(char **p1, char **p2)
 
 	case '&':
 		if(l == 0) {
-			t = tree(4);
-			t[DTYP] = TAND;
-			t[DLEF] = syn2(p1, p);
-			t[DRIT] = syn1b(p+1, p2);
-			t[DFLG] = 0;
+			t = tree();
+			t->DTYP = TAND;
+			t->DLEF = syn2(p1, p);
+			t->DRIT = syn1b(p+1, p2);
+			t->DFLG = 0;
 			return(t);
 		}
 	}
@@ -877,11 +877,11 @@ syn2(char **p1, char **p2)
 	case '|':
 	case '^':
 		if(l == 0) {
-			t = tree(4);
-			t[DTYP] = TFIL;
-			t[DLEF] = syn3(p1, p);
-			t[DRIT] = syn2(p+1, p2);
-			t[DFLG] = 0;
+			t = tree();
+			t->DTYP = TFIL;
+			t->DLEF = syn3(p1, p);
+			t->DRIT = syn2(p+1, p2);
+			t->DFLG = 0;
 			return(t);
 		}
 	}
@@ -965,21 +965,21 @@ syn3(char **p1, char **p2)
 	if(lp != 0) {
 		if(n != 0)
 			error++;
-		t = tree(5);
-		t[DTYP] = TPAR;
-		t[DSPR] = syn1(lp, rp);
+		t = tree();
+		t->DTYP = TPAR;
+		t->DSPR = syn1(lp, rp);
 	} else {
 		if(n == 0)
 			error++;
 		p1[n++] = 0;
-		t = tree(n+5);
-		t[DTYP] = TCOM;
+		t = tree();
+		t->DTYP = TCOM;
 		for(l=0; l<n; l++)
-			t[l+DCOM] = p1[l];
+			t->DARR[l] = p1[l];
 	}
-	t[DFLG] = flg;
-	t[DLEF] = i;
-	t[DRIT] = o;
+	t->DFLG = flg;
+	t->DLEF = i;
+	t->DRIT = o;
 	return(t);
 }
 
@@ -2434,7 +2434,7 @@ pexinit(void)
  *	return 0 if OK (or not present), -1 if runs off end in middle of line
  *	or if line too long.
  */
-static char *
+static int
 pexline(register char *ptr,
 	register char *ptrlim,
 	int psize,
@@ -2515,9 +2515,9 @@ expand(char *as)
 }
 
 static int
-sort(char *oavx)
+sort(char **oavx)
 {
-	register char **p1, **p2, **c;
+	register char **p1, **p2, *c;
 
 	p1 = oavx;
 	while (p1 < avx-1) {
@@ -2663,7 +2663,7 @@ tree(void)
 	if(treec == TRESIZ) {
 		prs("Command line overflow\n");
 		error++;
-		longjmp(jmpbuf, 1);
+		longjmp(error_jmp, 1);
 	}
 	return(&trebuf[treec++]);
 }
