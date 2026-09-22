@@ -82,6 +82,9 @@
 #define	ENOMEM	12
 #define	ENOEXEC 8
 
+#define DOLREPL 1
+#define DOLREPQ 2
+
 static struct tree {
   int t_dtyp;
   int t_dflg;
@@ -122,6 +125,8 @@ static char	setintr;
 static char	*arginp;
 static int	onelflg;
 static int	stoperr;
+static int	idolp;
+static char	*seta[26];
 
 #define	NSIG	sizeof mesg / sizeof *mesg
 static char	*mesg[] = {
@@ -149,7 +154,7 @@ static char	*args[ARGSIZ];
 static void main1(void);
 static void word(void);
 static struct tree *tree(void);
-static int getc(void);
+static int getc(int);
 static int readc(void);
 static struct tree *syntax(char **, char **);
 static struct tree *syn1(char **, char **);
@@ -226,7 +231,7 @@ main(int c, char *av[])
 loop:
 	if(promp != 0)
 		prs(promp);
-	peekc = getc();
+	peekc = getc(DOLREPL);
 	main1();
 	goto loop;
 }
@@ -261,63 +266,6 @@ main1(void)
 	}
 }
 
-static void
-word(void)
-{
-	register char c, c1;
-
-	*argp++ = linep;
-
-loop:
-	switch(c = getc()) {
-
-	case ' ':
-	case '\t':
-		goto loop;
-
-	case '\'':
-	case '"':
-		c1 = c;
-		while((c=readc()) != c1) {
-			if(c == '\n') {
-				error++;
-				peekc = c;
-				return;
-			}
-			*linep++ = c|QUOTE;
-		}
-		goto pack;
-
-	case '&':
-	case ';':
-	case '<':
-	case '>':
-	case '(':
-	case ')':
-	case '|':
-	case '^':
-	case '\n':
-		*linep++ = c;
-		*linep++ = '\0';
-		return;
-	}
-
-	peekc = c;
-
-pack:
-	for(;;) {
-		c = getc();
-		if(any(c, " '\"\t;&<>()|^\n")) {
-			peekc = c;
-			if(any(c, "\"'"))
-				goto loop;
-			*linep++ = '\0';
-			break;
-		}
-		*linep++ = c;
-	}
-}
-
 static struct tree *
 tree(void)
 {
@@ -327,61 +275,6 @@ tree(void)
 		longjmp(jmpbuf, 1);
 	}
 	return(&trebuf[treec++]);
-}
-
-static int
-getc(void)
-{
-	register char c;
-
-	if(peekc) {
-		c = peekc;
-		peekc = 0;
-		return(c);
-	}
-	if(argp > eargp) {
-		argp -= 10;
-		while((c=getc()) != '\n');
-		argp += 10;
-		err("Too many args",255);
-		gflg++;
-		return(c);
-	}
-	if(linep > elinep) {
-		linep -= 10;
-		while((c=getc()) != '\n');
-		linep += 10;
-		err("Too many characters",255);
-		gflg++;
-		return(c);
-	}
-getd:
-	if(dolp) {
-		c = *dolp++;
-		if(c != '\0')
-			return(c);
-		dolp = 0;
-	}
-	c = readc();
-	if(c == '\\') {
-		c = readc();
-		if(c == '\n')
-			return(' ');
-		return(c|QUOTE);
-	}
-	if(c == '$') {
-		c = readc();
-		if(c>='0' && c<='9') {
-			if(c-'0' < dolc)
-				dolp = dolv[c-'0'];
-			goto getd;
-		}
-		if(c == '$') {
-			dolp = pidp;
-			goto getd;
-		}
-	}
-	return(c&0177);
 }
 
 static int
@@ -946,5 +839,157 @@ pwait(int i)
 		if (e || (s&&stoperr))
 			err("", (s>>8)|e );
 		errval |= (s>>8);
+	}
+}
+
+static char	subchar = '$';	/* variable marker, may be changed by pump */
+
+/*	flag: !DOLREPL ==> no substitution, DOLREPL ==> substitute,
+	DOLREPQ ==> quoted substitution: "$1" = value of $1 for sure */
+static int
+getc(register int flag)
+{
+	register char c;
+
+	if(peekc) {
+		c = peekc;
+		peekc = 0;
+		return(c);
+	}
+	if(argp > eargp) {
+		argp -= 10;
+		while((c=getc(!DOLREPL)) != '\n');
+		argp += 10;
+		err("Too many args", 255);
+		gflg++;
+		return(c);
+	}
+	if(linep > elinep) {
+		linep -= 10;
+		while((c=getc(!DOLREPL)) != '\n');
+		linep += 10;
+		err("Too many characters", 255);
+		gflg++;
+		return(c);
+	}
+getd:
+	if(dolp) {
+		if (c = *dolp++) {
+			if (flag == DOLREPQ)
+				c |= QUOTE;
+			return c;
+		}
+		if (idolp && ++idolp < dolc) {
+			dolp = dolv[idolp];
+			return(' ');
+		}
+		dolp = 0;
+	}
+	c = readc();
+	if(c == subchar && flag) {
+		c = readc();
+		if(c>='0' && c<='9') {
+			if(c-'0' < dolc)
+				dolp = dolv[c-'0'];
+			goto getd;
+		}
+		else if(c>='a' && c<='z') {
+			dolp = seta[c-'a'];
+			goto getd;
+		}
+		else if(c == '$') {
+			dolp = pidp;
+			goto getd;
+		}
+		/* $* = $1 $2 .... */
+		else if (c == '*') {
+			if (dolc > 1) {
+				idolp = 1;
+				dolp = dolv[1];
+			}
+			goto getd;
+		}
+		else
+			if(c != '\n')  c = readc();
+	}
+	return(c&0177);
+}
+
+static void
+word(void)
+{
+	register char c, c1;
+	register dolflag;
+
+	*argp++ = linep;
+
+loop:
+	switch(c = getc(DOLREPL)) {
+
+	case ' ':
+	case '\t':
+		goto loop;
+
+	case '\'':	/* '...' : what you see is what you get */
+	case '"':	/* "..." : \", \$, $ substitution */
+		c1 = c;
+		dolflag = (c == '"' && !dolp) ? DOLREPQ : !DOLREPL;
+		while((c=getc(dolflag)) != c1) {
+			if(c == '\n') {
+				error++;
+				peekc = c;
+				return;
+			}
+			if (c1 == '"' && c == '\\' &&
+				((peekc = getc(!DOLREPL)) == '$' ||
+				peekc == '"')) {
+					c = peekc;
+					peekc = 0;
+			}
+			*linep++ = c|QUOTE;
+		}
+		goto pack;
+
+	case '&':
+	case '|':
+		*linep++ = c;
+		if((peekc=getc(DOLREPL)) == c)
+			peekc = 0;
+		else
+			linep--;
+	case ';':
+	case '<':
+	case '>':
+	case '(':
+	case ')':
+	case '^':
+	case '\n':
+		*linep++ = c;
+		*linep++ = '\0';
+		return;
+	case '\\':
+		if ((c=getc(!DOLREPL))=='\n') goto loop;
+		else {
+			c |= QUOTE;
+			break;
+		}
+	}
+
+	peekc = c;
+
+pack:
+	for(;;) {
+		if ((c = getc(DOLREPL))=='\\') {
+			if ((c=getc(!DOLREPL))=='\n') c = ' ';
+			else c |= QUOTE;
+		}
+		if(any(c, " '\"\t;&<>()|^\n")) {
+			peekc = c;
+			if(any(c, "\"'"))
+				goto loop;
+			*linep++ = '\0';
+			return;
+		}
+		*linep++ = c;
 	}
 }
