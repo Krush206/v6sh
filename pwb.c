@@ -132,7 +132,7 @@ char	*endcore, *endptr;
 void (*oldintr)(int);	/* save INTR state existing at start */
 int	wasintr;
 char	gointr[32];
-int	catchintr();
+static int catchintr();
 char	proflag;	/* 1 ==> inside .profile */
 			/* 2 ==> interrupt in .profile */
 char	redirf;	/* 1 ==> I/O redirection of input; controls pump rebuffering */
@@ -260,20 +260,29 @@ struct {
 	long bsyst;
 } tbuf;
 
-char *logtty(), *nxtarg(), *sname();
+static char *logtty(), *nxtarg(), *sname();
 static char *pwb_logname(void);
 static char *logdir(void);
-char *itoa(int);
-treeword_t *syntax(char **, char **);
-treeword_t *syn1(char **, char **);
-treeword_t *syn1a(char **, char **);
-treeword_t *syn1b(char **, char **);
-treeword_t *syn2(char **, char **);
-treeword_t *syn3(char **, char **);
-char *rdval(int, char *, char *);
-char *pcat(char *, char *, char *, int);
-char *pexline(char *, char *, int, char **, char **);
-char *cat(char *, char *);
+static char *itoa(int);
+static treeword_t *tree(int);
+static treeword_t *syntax(char **, char **);
+static treeword_t *syn1(char **, char **);
+static treeword_t *syn1a(char **, char **);
+static treeword_t *syn1b(char **, char **);
+static treeword_t *syn2(char **, char **);
+static treeword_t *syn3(char **, char **);
+static char *rdval(int, char *, char *);
+static char *pcat(char *, char *, char *, int);
+static char *pexline(char *, char *, int, char **, char **);
+static char *cat(char *, char *);
+static int main1(), word(), getc(), scan(), tglob(), trim(), execute();
+static int toend(), lookup(), dofork(), fclean(), texec(), catchpipe(), catchintr();
+static int dopump(), pwb_atoi(), xdie(), die(), err(), prs(), putc();
+static int any(), eq(), initacct(), pwait(), pwb_acct(), enacct();
+static int setxcod(), copy(), copyn(), pwb_exp(), e1(), e2(), e3(), tio();
+static int search(), getword(), readc(), eoferr(), bflush(), bsynch(), bseek();
+static int setwhere(), pexinit(), etcglob(), expand(), sort(), match(), amatch();
+static int umatch(), compar(), gdie();
 
 /*	following items implement while -- end stack of WDEEP levels */
 #define	WDEEP	3
@@ -288,7 +297,7 @@ int	wtop = WDEEP;	/* top of stack */
  * The PWB library supplied these account/login helpers.  Use the POSIX
  * equivalents so the shell no longer depends on a site-specific library.
  */
-char *logtty()
+static char *logtty()
 {
 	static char tty[2];
 	const char *name = ttyname(STDIN_FILENO);
@@ -429,7 +438,7 @@ loop:
 
 char line[LINSIZ];
 
-main1()
+static main1()
 {
 	char *args[ARGSIZ];
 	treeword_t trebuf[TRESIZ];
@@ -473,7 +482,7 @@ main1()
 }
 
 
-word()
+static word()
 {
 	register char c, c1;
 	register dolflag;
@@ -552,7 +561,7 @@ pack:
 }
 
 
-treeword_t *tree(int n)
+static treeword_t *tree(int n)
 {
 	register treeword_t *t;
 
@@ -570,7 +579,7 @@ char	subchar = '$';	/* variable marker, may be changed by pump */
 
 /*	flag: !DOLREPL ==> no substitution, DOLREPL ==> substitute,
 	DOLREPQ ==> quoted substitution: "$1" = value of $1 for sure */
-getc(flag)
+static getc(flag)
 register flag;
 {
 	register char c;
@@ -647,7 +656,7 @@ getd:
  *	syn1
  */
 
-treeword_t *syntax(p1, p2)
+static treeword_t *syntax(p1, p2)
 register char **p1, **p2;
 {
 
@@ -668,7 +677,7 @@ register char **p1, **p2;
  *	syn1a ; syntax
  */
 
-treeword_t *syn1(p1, p2)
+static treeword_t *syn1(p1, p2)
 char **p1, **p2;
 {
 	register char **p;
@@ -720,7 +729,7 @@ char **p1, **p2;
  *	syn1b || syn1a
  */
 
-treeword_t *syn1a(p1,p2)
+static treeword_t *syn1a(p1,p2)
 char **p1, **p2;
 {
 	register char **p;
@@ -761,7 +770,7 @@ char **p1, **p2;
  *	syn2 && syn1b
  */
 
-treeword_t *syn1b(p1,p2)
+static treeword_t *syn1b(p1,p2)
 char **p1, **p2;
 {
 	register char **p;
@@ -800,7 +809,7 @@ char **p1, **p2;
  *	syn3 | syn2
  */
 
-treeword_t *syn2(p1, p2)
+static treeword_t *syn2(p1, p2)
 char **p1, **p2;
 {
 	register char **p;
@@ -839,7 +848,7 @@ char **p1, **p2;
  *	word word* [ < in ] [ > out ]
  */
 
-treeword_t *syn3(p1, p2)
+static treeword_t *syn3(p1, p2)
 char **p1, **p2;
 {
 	register char **p;
@@ -928,7 +937,7 @@ char **p1, **p2;
 }
 
 
-scan(at, f)
+static scan(at, f)
 treeword_t *at;
 int (*f)();
 {
@@ -941,7 +950,7 @@ int (*f)();
 }
 
 
-tglob(s)
+static tglob(s)
 char *s;
 {
 	register char *p, c;
@@ -952,7 +961,7 @@ char *s;
 }
 
 
-trim(s)
+static trim(s)
 char *s;
 {
 	register char *p;
@@ -964,7 +973,7 @@ int	ap, ac;		/* arg pointer & count for if & related cmds */
 char	**av;		/* av[0] = t[DCOM] */
 int	*savdlef;	/* for cmd piped into, has &t for cmd on other end */
 
-execute(t, pf1, pf2)
+static execute(t, pf1, pf2)
 treeword_t *t;
 int *pf1, *pf2;
 {
@@ -1404,7 +1413,7 @@ tryagain:	/* if expr command may come back here to do command */
 	}
 }
 
-toend()
+static toend()
 {
 	if (wstk[wtop].eloc == 0) { /* need to find end */
 		ARG1 = 0;
@@ -1415,7 +1424,7 @@ toend()
 }
 
 
-lookup(p)
+static lookup(p)
 register char *p;
 {
 	register char *q;
@@ -1426,7 +1435,7 @@ register char *p;
 	return -1;
 }
 
-dofork()
+static dofork()
 {
 	register wt, i;
 	for(wt = 10;; wt += 10) {
@@ -1442,7 +1451,7 @@ dofork()
 	return i;
 }
 
-fclean()
+static fclean()
 {
 	if (acctf)
 		close(acctf);
@@ -1451,7 +1460,7 @@ fclean()
 	return;
 }
 
-texec(f, t)
+static texec(f, t)
 register treeword_t *t;
 {
 	extern errno;
@@ -1501,7 +1510,7 @@ register treeword_t *t;
 }
 
 char	pipebomb;	/* 1 ==> SIGPIPE caught */
-catchpipe()
+static catchpipe()
 {
 	if (promp != 0)
 		exit(1);
@@ -1526,7 +1535,7 @@ catchpipe()
  *	eofstr is safe because initial arg can't be at beginning
  */
 
-dopump(t)
+static dopump(t)
 register char **t;
 {
 #define	eofstr	line
@@ -1590,7 +1599,7 @@ register char **t;
 	exit(pipebomb);
 }
 
-atoi(s)
+static pwb_atoi(s)
 char *s;
 {
 
@@ -1616,14 +1625,14 @@ char *s;
 	return neg? -i: i;
 }
 
-xdie(str1, str2)
+static xdie(str1, str2)
 char *str1, *str2;
 {
 	die(str1, str2);
 	exit(1);
 }
 
-die(str1, str2)
+static die(str1, str2)
 char *str1, *str2;
 {
 	prs(ARG0);
@@ -1637,7 +1646,7 @@ char *str1, *str2;
  *	err: emit error message, flush input by seeking to EOF (but only
  *␁	if reading from 0 in unrestricted way), exit.
  */
-err(s)
+static err(s)
 char *s;
 {
 
@@ -1649,7 +1658,7 @@ char *s;
 }
 
 
-prs(s)
+static prs(s)
 register char *s;
 {
 
@@ -1660,14 +1669,14 @@ register char *s;
 }
 
 
-putc(c)
+static putc(c)
 {
 
 	write(2, &c, 1);
 }
 
 
-any(c, s)
+static any(c, s)
 register char c, *s;
 {
 
@@ -1678,7 +1687,7 @@ register char c, *s;
 }
 
 
-eq(s1, s2)
+static eq(s1, s2)
 register char *s1, *s2;
 {
 
@@ -1703,7 +1712,7 @@ register char *s1, *s2;
 	PERMITS BETTER INTERNAL CMD HANDLING.
  */
 
-initacct()
+static initacct()
 {
 	register f;
 	if ((acctf = open(ACNAME, 1)) < 0)
@@ -1725,7 +1734,7 @@ initacct()
 	return;
 }
 
-pwait(i, t)
+static pwait(i, t)
 int i, *t;
 {
 	register p, e, *t1;
@@ -1777,7 +1786,7 @@ int i, *t;
 }
 
 
-acct(t)
+static pwb_acct(t)
 treeword_t *t;
 {
 	if(t == 0)
@@ -1789,7 +1798,7 @@ treeword_t *t;
 }
 
 
-enacct(as, acctype)
+static enacct(as, acctype)
 char *as;
 int acctype;	/* 0 ==> child process, 1 ==> internal cmd */
 {
@@ -1826,7 +1835,7 @@ int acctype;	/* 0 ==> child process, 1 ==> internal cmd */
 }
 
 
-char *rdval(pipef, lef, na)
+static char *rdval(pipef, lef, na)
 int pipef;
 char *lef;
 char *na;
@@ -1859,7 +1868,7 @@ char *na;
 }
 
 
-catchintr() {
+static catchintr() {
 	if (proflag)
 		proflag++;	/* in .profile, make sure come out ok */
 	wasintr++;
@@ -1867,7 +1876,7 @@ catchintr() {
 }
 
 
-char *pcat(so1, so2, si, sz)
+static char *pcat(so1, so2, si, sz)
 register char *so1, *so2;
 char *si;
 int sz;
@@ -1887,7 +1896,7 @@ int sz;
 }
 
 
-setxcod(code)
+static setxcod(code)
 int code;
 {
 	copy(itoa(code), exitstr);
@@ -1895,7 +1904,7 @@ int code;
 	return;
 }
 
-copy(source, sink)
+static copy(source, sink)
 register char *source, *sink;
 {
 	 while(*sink++ = *source++ & 0177);
@@ -1904,7 +1913,7 @@ register char *source, *sink;
 /*
  *	copyn: copy at most n bytes from source to sink.
  */
-copyn(source, sink, n)
+static copyn(source, sink, n)
 register char *source, *sink;
 int	n;
 {
@@ -1914,7 +1923,7 @@ int	n;
 			break;
 }
 
-char *itoa(n) {
+static char *itoa(n) {
 	register i, j;
 	register char *cp;
 	static char str[12];
@@ -1929,7 +1938,7 @@ char *itoa(n) {
 	}
 }
 
-char *nxtarg()
+static char *nxtarg()
 {
 	register iap;
 
@@ -1938,7 +1947,7 @@ char *nxtarg()
 	return trim(av[iap]);
 }
 
-exp() {
+static pwb_exp() {
 	int p1;
 
 	p1 = e1();
@@ -1947,7 +1956,7 @@ exp() {
 	return(p1);
 }
 
-e1() {
+static e1() {
 	int p1;
 
 	p1 = e2();
@@ -1956,14 +1965,14 @@ e1() {
 	return(p1);
 }
 
-e2() {
+static e2() {
 	if (eq(nxtarg(), "!"))
 		return(!e3());
 	ap--;
 	return(e3());
 }
 
-e3() {
+static e3() {
 	int ccode;
 	int nap;
 	int int1, int2;
@@ -2048,7 +2057,7 @@ erre3:
 	die(SYNTAX, p1);
 }
 
-tio(a, f)
+static tio(a, f)
 char *a; int f;
 {
 	register int fil;
@@ -2070,7 +2079,7 @@ char *a; int f;
  *	ZBREAK: unmatched end (break, failed while or end)
  *	levinit = 0, except when called from else if ... then, when it is 1
  */
-search(type, levinit)
+static search(type, levinit)
 int type, levinit;
 {
 	register int level, t;
@@ -2144,7 +2153,7 @@ int type, levinit;
 	return 1 if word, 0 if only newline left.
 */
 
-getword(aword)
+static getword(aword)
 char *aword;
 {
 	register int found;	/* 1 ==> found word, 0 ==> not */
@@ -2178,7 +2187,7 @@ char *aword;
 	return(found);
 }
 
-readc()
+static readc()
 {
 	register c;
 
@@ -2216,7 +2225,7 @@ readc()
 }
 
 /*	eoferr: issue error message if cmd was in middle of search */
-eoferr()
+static eoferr()
 {
 	switch (COMTYPE) {
 	case ZGOTO:
@@ -2240,7 +2249,7 @@ eoferr()
 }
 
 /*	bflush: complete input flush */
-bflush()
+static bflush()
 {
 	seek(0, 0, 2);
 	b.nleft = b.gotten = 0;
@@ -2249,7 +2258,7 @@ bflush()
 
 /*	bsynch: synchronize internal buffering & outside world */
 /*	btarg gives nominal target value of bstate */
-bsynch(btarg)
+static bsynch(btarg)
 register btarg;
 {
 	register obstate;
@@ -2280,7 +2289,7 @@ register btarg;
 }
 
 /*	bseek: seek, staying within current input buffer b, if possible */
-bseek(where)
+static bseek(where)
 long where;
 {
 	long bend;
@@ -2300,7 +2309,7 @@ long where;
 }
 
 /*	sname: simple name (last component) of file name */
-char *sname(s)
+static char *sname(s)
 register char *s;
 {
 	register char *p;
@@ -2312,7 +2321,7 @@ register char *s;
 
 /*	setwhere: set up wherev for $w (1st component of pathname) */
 char	wherev[6];
-setwhere()
+static setwhere()
 {
 	register char *s, *w;
 	register i;
@@ -2329,7 +2338,7 @@ setwhere()
  *	may be invoked before fork to avoid unnecessary .path opening.
  *	returns 0 if OK, -1 if any error.
  */
-pexinit()
+static pexinit()
 {
 	char pathbuf[128 + 16];
 	register n, f;
@@ -2364,7 +2373,7 @@ pexinit()
  *	return 0 if OK (or not present), -1 if runs off end in middle of line
  *	or if line too long.
  */
-char *pexline(ptr, ptrlim, psize, pret, pnext)
+static char *pexline(ptr, ptrlim, psize, pret, pnext)
 register char *ptr, *ptrlim;
 int psize;
 char **pret, **pnext;
@@ -2402,7 +2411,7 @@ char	*string;
 char	*ablimit;
 int	ncoll;
 
-etcglob(argv)
+static etcglob(argv)
 char *argv[];
 {
 	char	ab[STRSIZ];		/* generated characters */
@@ -2420,7 +2429,7 @@ char *argv[];
 	xdie(avxa[DCOM], CANTEX);
 }
 
-expand(as)
+static expand(as)
 char *as;
 {
 	glob_t matches;
@@ -2442,7 +2451,7 @@ char *as;
 	sort(oavx);
 }
 
-sort(oavx)
+static sort(oavx)
 char **oavx;
 {
 	register char **p1, **p2, **c;
@@ -2462,7 +2471,7 @@ char **oavx;
 }
 
 
-match(s, p)
+static match(s, p)
 char *s, *p;
 {
 	if (*s=='.' && *p!='.')
@@ -2470,7 +2479,7 @@ char *s, *p;
 	return(amatch(s, p));
 }
 
-amatch(as, ap)
+static amatch(as, ap)
 char *as, *ap;
 {
 	register char *s, *p;
@@ -2519,7 +2528,7 @@ char *as, *ap;
 	}
 }
 
-umatch(s, p)
+static umatch(s, p)
 char *s, *p;
 {
 	if(*p==0)
@@ -2530,7 +2539,7 @@ char *s, *p;
 	return(0);
 }
 
-compar(as1, as2)
+static compar(as1, as2)
 char *as1, *as2;
 {
 	register char *s1, *s2;
@@ -2543,7 +2552,7 @@ char *as1, *as2;
 	return (*--s1 - *s2);
 }
 
-char *cat(as1, as2)
+static char *cat(as1, as2)
 char *as1, *as2;
 {
 	register char *s1, *s2;
@@ -2577,7 +2586,7 @@ char *as1, *as2;
  *	purpose is to make internal glob work same as external one.
  *	something should be done about match/nomatch actions.
  */
-gdie(str)
+static gdie(str)
 char *str;
 {
 	prs(ARG0); prs(": ");
