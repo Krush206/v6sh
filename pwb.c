@@ -77,69 +77,67 @@ static jmp_buf error_jmp;
 /*	BSIZ = buffer for tty, BSIZFIL = size for file, 1 = size for pipe */
 #define BSIZ 64
 #define BSIZFIL	512
-struct {
+static struct {
 	long start;	/* absolute file addr of char in buf[0] */
 	long linloc;	/* loc of begin of line for while processing */
 	int gotten;	/* number of bytes read in last actual read */
 	int nleft;
 	char *nextp;
 } b;
-char	bstate;	/* primary state var for control of buffering */
+static char	bstate;	/* primary state var for control of buffering */
 		/* 0 ==> BNOW right; real I/O ptr set at BEND (internal I/O) */
 		/* 1 ==> real ptr has been set from BNOW (pre-exec) */
 		/* 2 ==> post-exec - internals must be reset */
 		/* pre-exec: 0->1; post-exec: 1->2; int cmd: 2->0 */
 		/* pump begin: 1->0 */
-char	b1char;	/* input buffer: 1 at a time */
-char	*bbuf = &b1char;	/* addr of actual buffer */
+static char	b1char;	/* input buffer: 1 at a time */
+static char	*bbuf = &b1char;	/* addr of actual buffer */
 #define	BNOW	(b.start + (b.gotten - b.nleft))
 #define	BEND	(b.start + b.gotten)
-int bnread = BSIZ;	/* must change to 1 if found to be in pipe */
+static int bnread = BSIZ;	/* must change to 1 if found to be in pipe */
 
 #define ACNAME	"/etc/sha"
 
-char	*dolp;
-int	idolp;
-int	oldfil0;	/* fildes for original file 0 */
-char	pidp[6], argstr[6];
-int	wide = 5; /* glitch for 5char pid # */
-char	devtty[10];
-int	ldivr;
-char	**dolv;
-int	dolc;
-char	*promp, *opromp, *optpromp;
-char	*linep;
-char	*elinep;
-char	**argp;
-char	**eargp;
-struct tree *treep;
-struct tree *treeend;
-char	peekc;
-char	gflg;
-char	error;
-char	acctf;	/*	<= 0 ==> no acctg at all, >0 ==> acctg */
-char	acctfi;	/*	= 0 ==> no acctg for internal cmds */
-char	uid;
-char	setintr;
-char	*arginp;
-char	onelflg;
-char	rflg;
-int	exitcode;
-char	exitstr[6] ;
-char	*seta[26];
-char	*endcore, *endptr;
-int	wasintr;
-char	gointr[32];
-char	proflag;	/* 1 ==> inside .profile */
+static char	*dolp;
+static int	idolp;
+static int	oldfil0;	/* fildes for original file 0 */
+static char	pidp[6], argstr[6];
+static int	wide = 5; /* glitch for 5char pid # */
+static char	devtty[10];
+static int	ldivr;
+static char	**dolv;
+static int	dolc;
+static char	*promp, *opromp, *optpromp;
+static char	*linep;
+static char	*elinep;
+static char	**argp;
+static char	**eargp;
+static char	peekc;
+static char	gflg;
+static char	error;
+static char	acctf;	/*	<= 0 ==> no acctg at all, >0 ==> acctg */
+static char	acctfi;	/*	= 0 ==> no acctg for internal cmds */
+static char	uid;
+static char	setintr;
+static char	*arginp;
+static char	onelflg;
+static char	rflg;
+static int	exitcode;
+static char	exitstr[6] ;
+static char	*seta[26];
+static char	*endcore, *endptr;
+static int	wasintr;
+static char	gointr[32];
+static char	proflag;	/* 1 ==> inside .profile */
 			/* 2 ==> interrupt in .profile */
-char	redirf;	/* 1 ==> I/O redirection of input; controls pump rebuffering */
-char	optfv;		/* 0 ==> +v, 1 ==> -v; -v ==> print commands */
+static char	redirf;	/* 1 ==> I/O redirection of input; controls pump rebuffering */
+static char	optfv;		/* 0 ==> +v, 1 ==> -v; -v ==> print commands */
 
 
-struct stat sb;
+static struct stat sb;
 
 /*	commands performed internally */
-char	*comint[] = {
+static char	*comint[] = {
 	"chdir",	/* 0 */
 	"shift",	/* 1 */
 	"login",	/* 2 */
@@ -199,11 +197,11 @@ char	*comint[] = {
 #define	END	comint[ZEND]
 
 /*	other keywords */
-char	THEN[] = "then";
-char	*ARG0, *ARG1;	/* for diagnostics & internal commands */
-int	COMTYPE;	/* code for command, -1, or one of Z* */
+static char	THEN[] = "then";
+static char	*ARG0, *ARG1;	/* for diagnostics & internal commands */
+static int	COMTYPE;	/* code for command, -1, or one of Z* */
 
-char	*mesg[] = {
+static char	*mesg[] = {
 	0,
 	"Hangup",
 	0,
@@ -227,26 +225,26 @@ char	*mesg[] = {
 };
 
 /*	messages */
-char	*SYNTAX = "syntax error: ";
-char	*MISS = "missing ";
-char	*MISSL = "missing label: ";
-char	*NONUM = "non-numeric arg: ";
+static char	*SYNTAX = "syntax error: ";
+static char	*MISS = "missing ";
+static char	*MISSL = "missing label: ";
+static char	*NONUM = "non-numeric arg: ";
 
-char	*ARGCNT = "arg count";
-char	*ARGLNG = "arg list too long";
-char	*BADARG = "bad arg: ";
-char	*CANTEX = "cannot execute";
-char	*CANTOP = "cannot open: ";
-char	*NOTPER = "not permitted";
-char	*NOTWHI = "used outside loop";
-char	*EQERR = "`=' error";
+static char	*ARGCNT = "arg count";
+static char	*ARGLNG = "arg list too long";
+static char	*BADARG = "bad arg: ";
+static char	*CANTEX = "cannot execute";
+static char	*CANTOP = "cannot open: ";
+static char	*NOTPER = "not permitted";
+static char	*NOTWHI = "used outside loop";
+static char	*EQERR = "`=' error";
 
-struct stime {
+static struct stime {
 	long procu, procs, childu, childs, curtim;
 } timeb;
 
 
-struct {
+static struct {
 	char cname[8];
 	char lname[6];
 	char shtty;
@@ -286,17 +284,18 @@ static void (*oldintr)(int);	/* save INTR state existing at start */
 /*	following items implement while -- end stack of WDEEP levels */
 #define	WDEEP	3
 #define INWHILE	(wtop < WDEEP)
-struct {
+static struct {
 	long sloc;	/* starting loc = addr of while */
 	long eloc;	/* ending loc = addr of line AFTER end */
 } wstk[WDEEP];
-int	wtop = WDEEP;	/* top of stack */
+static int	wtop = WDEEP;	/* top of stack */
 
 /*
  * The PWB library supplied these account/login helpers.  Use the POSIX
  * equivalents so the shell no longer depends on a site-specific library.
  */
-static char *logtty()
+static char *
+logtty(void)
 {
 	static char tty[2];
 	const char *name = ttyname(STDIN_FILENO);
@@ -306,7 +305,8 @@ static char *logtty()
 	return tty;
 }
 
-static char *pwb_logname(void)
+static char *
+logname(void)
 {
 	const char *name = getlogin();
 
@@ -315,7 +315,8 @@ static char *pwb_logname(void)
 	return "unknown";
 }
 
-static char *logdir(void)
+static char *
+logdir(void)
 {
 	struct passwd *pw = getpwuid(getuid());
 	const char *home = getenv("HOME");
@@ -327,6 +328,7 @@ static char *logdir(void)
 	return "/";
 }
 
+static int
 main(int c, char *argv[])
 {
 	register int f;
@@ -433,9 +435,10 @@ loop:
 }
 
 
-char line[LINSIZ];
+static char line[LINSIZ];
 
-static void main1(void)
+static void
+main1(void)
 {
 	char *args[ARGSIZ];
 	struct tree trebuf[TRESIZ];
@@ -479,7 +482,8 @@ static void main1(void)
 }
 
 
-static void word(void)
+static void
+word(void)
 {
 	register char c, c1;
 	register dolflag;
@@ -557,27 +561,12 @@ pack:
 	}
 }
 
-
-static struct tree *tree(int n)
-{
-	register struct tree *t;
-
-	t = treep;
-	treep += n;
-	if (treep>treeend) {
-		prs("Command line overflow\n");
-		error++;
-		reset();
-	}
-	return(t);
-}
-
-char	subchar = '$';	/* variable marker, may be changed by pump */
+static char	subchar = '$';	/* variable marker, may be changed by pump */
 
 /*	flag: !DOLREPL ==> no substitution, DOLREPL ==> substitute,
 	DOLREPQ ==> quoted substitution: "$1" = value of $1 for sure */
-static getc(flag)
-register flag;
+static int
+getc(register int flag)
 {
 	register char c;
 
@@ -653,8 +642,8 @@ getd:
  *	syn1
  */
 
-static struct tree *syntax(p1, p2)
-register char **p1, **p2;
+static struct tree *
+syn1(register char **p1, register char **p2)
 {
 
 	while(p1 != p2) {
@@ -674,8 +663,8 @@ register char **p1, **p2;
  *	syn1a ; syntax
  */
 
-static struct tree *syn1(p1, p2)
-char **p1, **p2;
+static struct tree *
+syn1(char **p1, char **p2)
 {
 	register char **p;
 	register struct tree *t, *t1;
@@ -726,8 +715,8 @@ char **p1, **p2;
  *	syn1b || syn1a
  */
 
-static struct tree *syn1a(p1,p2)
-char **p1, **p2;
+static struct tree *
+syn1a(char **p1, char **p2)
 {
 	register char **p;
 	register int l;
@@ -767,8 +756,8 @@ char **p1, **p2;
  *	syn2 && syn1b
  */
 
-static struct tree *syn1b(p1,p2)
-char **p1, **p2;
+static struct tree *
+syn1b(char **p1, char **p2)
 {
 	register char **p;
 	register int l;
@@ -806,8 +795,8 @@ char **p1, **p2;
  *	syn3 | syn2
  */
 
-static struct tree *syn2(p1, p2)
-char **p1, **p2;
+static struct tree *
+syn2(char **p1, char **p2)
 {
 	register char **p;
 	register int l, *t;
@@ -845,8 +834,8 @@ char **p1, **p2;
  *	word word* [ < in ] [ > out ]
  */
 
-static struct tree *syn3(p1, p2)
-char **p1, **p2;
+static struct tree *
+syn3(char **p1, char **p2)
 {
 	register char **p;
 	char **lp, **rp;
@@ -934,9 +923,8 @@ char **p1, **p2;
 }
 
 
-static scan(at, f)
-struct tree *at;
-int (*f)();
+static void
+scan(struct tree *at, int (*f)(void))
 {
 	register char *p;
 	register struct tree *t;
@@ -947,8 +935,8 @@ int (*f)();
 }
 
 
-static tglob(s)
-char *s;
+static void
+tglob(char *s)
 {
 	register char *p, c;
 
@@ -958,21 +946,20 @@ char *s;
 }
 
 
-static trim(s)
-char *s;
+static int
+trim(char *s)
 {
 	register char *p;
 
 	for (p=s; (*p++ &= 0177); );
 	return(s);
 }
-int	ap, ac;		/* arg pointer & count for if & related cmds */
-char	**av;		/* av[0] = t[DCOM] */
-int	*savdlef;	/* for cmd piped into, has &t for cmd on other end */
+static int	ap, ac;		/* arg pointer & count for if & related cmds */
+static char	**av;		/* av[0] = t[DCOM] */
+static int	*savdlef;	/* for cmd piped into, has &t for cmd on other end */
 
-static execute(t, pf1, pf2)
-struct tree *t;
-int *pf1, *pf2;
+static void
+execute(struct tree *t, int *pf1, int pf2*)
 {
 	int i, f, pv[2], wt;
 	register struct tree *t1;
@@ -1410,7 +1397,8 @@ tryagain:	/* if expr command may come back here to do command */
 	}
 }
 
-static toend()
+static void
+toend(void)
 {
 	if (wstk[wtop].eloc == 0) { /* need to find end */
 		ARG1 = 0;
@@ -1421,8 +1409,8 @@ static toend()
 }
 
 
-static lookup(p)
-register char *p;
+static int
+lookup(register char *p)
 {
 	register char *q;
 	register i;
@@ -1432,7 +1420,8 @@ register char *p;
 	return -1;
 }
 
-static dofork()
+static int
+dofork(void)
 {
 	register wt, i;
 	for(wt = 10;; wt += 10) {
@@ -1448,19 +1437,18 @@ static dofork()
 	return i;
 }
 
-static fclean()
+static void
+flclean(void)
 {
 	if (acctf)
 		close(acctf);
 	if (oldfil0)
 		close(oldfil0);
-	return;
 }
 
-static texec(f, t)
-register struct tree *t;
+static void
+texec(register char *f, register struct tree *t)
 {
-	extern errno;
 	register char *cp;
 	char tline[48];
 	char txe2big, txeacces;
@@ -1506,13 +1494,13 @@ register struct tree *t;
 	xdie("not found", 0);
 }
 
-char	pipebomb;	/* 1 ==> SIGPIPE caught */
-static catchpipe()
+static char	pipebomb;	/* 1 ==> SIGPIPE caught */
+static void
+catchpipe(void)
 {
 	if (promp != 0)
 		exit(1);
 	pipebomb++;
-	return;
 }
 
 /*	dopump: pump command:
@@ -2330,7 +2318,7 @@ static char *sname(char *s)
 }
 
 /*	setwhere: set up wherev for $w (1st component of pathname) */
-char	wherev[6];
+static char	wherev[6];
 static int
 setwhere(void)
 {
@@ -2420,10 +2408,10 @@ pexline(register char *ptr,
  */
 
 #define	STRSIZ	5300
-char	**avx;
-char	*string;
-char	*ablimit;
-int	ncoll;
+static char	**avx;
+static char	*string;
+static char	*ablimit;
+static int	ncoll;
 
 static int
 etcglob(char *argv[])
