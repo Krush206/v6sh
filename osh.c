@@ -82,17 +82,7 @@
 #define	ENOMEM	12
 #define	ENOEXEC 8
 
-#define N 'n'-'a'
-#define P 'p'-'a'
-#define R 'r'-'a'
-#define S 's'-'a'
-#define T 't'-'a'
-#define W 'w'-'a'
-#define Z 'z'-'a'
-#define DOLREPL 1
-#define DOLREPQ 2
-
-static struct tree {
+struct tree {
   int t_dtyp;
   int t_dflg;
   union {
@@ -112,31 +102,29 @@ static struct tree {
     char *t_darr[TRESIZ];
   } t_dcom;
 } trebuf[TRESIZ];
-static int treec;
-static int errval;
-static char	*dolp;
-static char	pidp[6];
-static char	**dolv;
-static jmp_buf	jmpbuf;
-static int	dolc;
-static char	*promp;
-static char	*linep;
-static char	*elinep;
-static char	**argp;
-static char	**eargp;
-static char	peekc;
-static char	gflg;
-static char	error;
-static char	uid;
-static char	setintr;
-static char	*arginp;
-static int	onelflg;
-static int	stoperr;
-static int	idolp;
-static char	*seta[26];
+int treec;
+int errval;
+char	*dolp;
+char	pidp[6];
+char	**dolv;
+jmp_buf	jmpbuf;
+int	dolc;
+char	*promp;
+char	*linep;
+char	*elinep;
+char	**argp;
+char	**eargp;
+char	peekc;
+char	gflg;
+char	error;
+char	uid;
+char	setintr;
+char	*arginp;
+int	onelflg;
+int	stoperr;
 
 #define	NSIG	sizeof mesg / sizeof *mesg
-static char	*mesg[] = {
+char	*mesg[] = {
 	0,
 	"Hangup",
 	0,
@@ -155,25 +143,13 @@ static char	*mesg[] = {
 	"Terminated",
 };
 
-static char	line[LINSIZ];
-static char	*args[ARGSIZ];
+char	line[LINSIZ];
+char	*args[ARGSIZ];
 
-#define ERR_SYNTAX "syntax error"
-#define ERR_EQUALS "'=' error"
-#define ERR_BADDIR ": bad directory"
-#define ERR_COUNT ": arg count"
-#define ERR_AGAIN "try again"
-#define ERR_OPEN ": cannot open"
-#define ERR_CREATE ": cannot create"
-#define ERR_FOUND ": not found"
-#define ERR_LARGE ": too large"
-
-static char *itoa(int);
-static void copy(char *, char *);
-static void main1(void);
-static void word(void);
+static int main1(void);
+static int word(void);
 static struct tree *tree(void);
-static int getc(int);
+static int getc(void);
 static int readc(void);
 static struct tree *syntax(char **, char **);
 static struct tree *syn1(char **, char **);
@@ -191,7 +167,6 @@ static void prn(int);
 static int any(int, char *);
 static int equal(char *, char *);
 static void pwait(int);
-static void setxcod(int);
 
 int
 main(int c, char *av[])
@@ -234,7 +209,7 @@ main(int c, char *av[])
 			f = open(v[1], 0);
 			if(f < 0) {
 				prs(v[1]);
-				err(ERR_OPEN, 255);
+				err(": cannot open",255);
 			}
 		}
 	}
@@ -251,13 +226,13 @@ main(int c, char *av[])
 loop:
 	if(promp != 0)
 		prs(promp);
-	peekc = getc(DOLREPL);
+	peekc = getc();
 	main1();
 	goto loop;
 }
 
-static void
-main1(void)
+static int
+main1()
 {
 	register char  *cp;
 	register struct tree *t;
@@ -277,17 +252,73 @@ main1(void)
 		if(error == 0) {
 			setjmp(jmpbuf);
 			if (error)
-				return;
+				return 1;
 			t = syntax(args, argp);
 		}
 		if(error != 0)
-			err(ERR_SYNTAX, 255); else
+			err("syntax error",255); else
 			execute(t, 0, 0);
 	}
 }
 
-static struct tree *
-tree(void)
+static int
+word()
+{
+	register char c, c1;
+
+	*argp++ = linep;
+
+loop:
+	switch(c = getc()) {
+
+	case ' ':
+	case '\t':
+		goto loop;
+
+	case '\'':
+	case '"':
+		c1 = c;
+		while((c=readc()) != c1) {
+			if(c == '\n') {
+				error++;
+				peekc = c;
+				return 1;
+			}
+			*linep++ = c|QUOTE;
+		}
+		goto pack;
+
+	case '&':
+	case ';':
+	case '<':
+	case '>':
+	case '(':
+	case ')':
+	case '|':
+	case '^':
+	case '\n':
+		*linep++ = c;
+		*linep++ = '\0';
+		return 1;
+	}
+
+	peekc = c;
+
+pack:
+	for(;;) {
+		c = getc();
+		if(any(c, " '\"\t;&<>()|^\n")) {
+			peekc = c;
+			if(any(c, "\"'"))
+				goto loop;
+			*linep++ = '\0';
+			return 1;
+		}
+		*linep++ = c;
+	}
+}
+
+static struct tree *tree()
 {
 	if(treec == TRESIZ) {
 		prs("Command line overflow\n");
@@ -295,6 +326,61 @@ tree(void)
 		longjmp(jmpbuf, 1);
 	}
 	return(&trebuf[treec++]);
+}
+
+static int
+getc(void)
+{
+	register char c;
+
+	if(peekc) {
+		c = peekc;
+		peekc = 0;
+		return(c);
+	}
+	if(argp > eargp) {
+		argp -= 10;
+		while((c=getc()) != '\n');
+		argp += 10;
+		err("Too many args",255);
+		gflg++;
+		return(c);
+	}
+	if(linep > elinep) {
+		linep -= 10;
+		while((c=getc()) != '\n');
+		linep += 10;
+		err("Too many characters",255);
+		gflg++;
+		return(c);
+	}
+getd:
+	if(dolp) {
+		c = *dolp++;
+		if(c != '\0')
+			return(c);
+		dolp = 0;
+	}
+	c = readc();
+	if(c == '\\') {
+		c = readc();
+		if(c == '\n')
+			return(' ');
+		return(c|QUOTE);
+	}
+	if(c == '$') {
+		c = readc();
+		if(c>='0' && c<='9') {
+			if(c-'0' < dolc)
+				dolp = dolv[c-'0'];
+			goto getd;
+		}
+		if(c == '$') {
+			dolp = pidp;
+			goto getd;
+		}
+	}
+	return(c&0177);
 }
 
 static int
@@ -561,44 +647,18 @@ execute(struct tree *t, int *pf1, int *pf2)
 	register struct tree *t1;
 	register char *cp1, *cp2;
 
-	if (t == 0)
+	if(t == 0)
 		return;
 	switch(t->DTYP) {
-		int p;
 
 	case TCOM:
-		cp1 = t->DARR[0];
-		if (equal(cp1, "="))
-		{
-			if(t->DFLG&FPIN) close(pf1[1]);
-			i = *cp2 - 'a';
-			if(t->DARR[3] != 0 && eq(t->DARR[2], "")) {
-				t->DARR[2] = t->DARR[3];
-				setxcod(1);
-			}
-				/* 3rd exists & null 2nd ==> use 3rd instead */
-			if(i>25 || i<0)
-				err(ERR_EQUALS, 255);
-			f = t->DFLG&FPIN;
-			if ((seta[i] = rdval((f ? pf1[0] : 0),
-				t[DLEF], t[DCOM+2]))==0)
-				err(ERR_EQUALS, 255);
-			if (f) {	/* piped, must assure synch */
-				pwait(savdlef[DSPR], savdlef);
-				bsynch(2);
-			}
-			break;
-		}
+		cp1 = *t->DARR;
 		if(equal(cp1, "chdir")) {
 			if(t->DARR[1] != 0) {
-				if(chdir(t->DARR[1]) > 0) {
-					prs(cp1);
-					err(ERR_BADDIR, 255);
-				}
-			} else {
-				prs(cp1);
-				err(ERR_COUNT, 255);
-			}
+				if(chdir(t->DARR[1]) < 0)
+					err("chdir: bad directory",255);
+			} else
+				err("chdir: arg count",255);
 			break;
 		}
 		if(equal(cp1, "shift")) {
@@ -638,7 +698,7 @@ execute(struct tree *t, int *pf1, int *pf2)
 		if((f&FPAR) == 0)
 			i = fork();
 		if(i == -1) {
-			err(ERR_AGAIN, 255);
+			err("try again",255);
 			break;
 		}
 		if(i != 0) {
@@ -661,7 +721,7 @@ execute(struct tree *t, int *pf1, int *pf2)
 			i = open(t->DLPT, 0);
 			if(i < 0) {
 				prs(t->DLPT);
-				err(ERR_OPEN, 255);
+				err(": cannot open",255);
 				exit(255);
 			}
 		}
@@ -676,10 +736,10 @@ execute(struct tree *t, int *pf1, int *pf2)
 			i = creat(t->DRPT, 0666);
 			if(i < 0) {
 				prs(t->DRPT);
-				err(ERR_CREATE, 255);
+				err(": cannot create",255);
 				exit(255);
 			}
-f1:
+		f1:
 			close(1);
 			dup(i);
 			close(i);
@@ -718,32 +778,35 @@ f1:
 			prs("glob: cannot execute\n");
 			exit(255);
 		}
-		scan(t, trim);
-		*linep = 0;
-		texec(t->DPTR, t);
-		cp1 = linep;
-		cp2 = getenv("PATH");
-		p = 0;
-		while((*cp1 = *cp2++)) {
-			p++;
-			if(*cp1 == ':') {
-				*cp1++ = '/';
-				cp2 = *t->DARR;
-				while((*cp1++ = *cp2++));
-				texec(linep, t);
-				cp1 = linep;
-				cp2 = &getenv("PATH")[p];
-				continue;
+		{
+			int p = 0;
+
+			scan(t, trim);
+			*linep = 0;
+			texec(t->DPTR, t);
+			cp1 = linep;
+			cp2 = getenv("PATH");
+			while((*cp1 = *cp2++)) {
+				p++;
+				if(*cp1 == ':') {
+					*cp1++ = '/';
+					cp2 = *t->DARR;
+					while((*cp1++ = *cp2++));
+					texec(linep, t);
+					cp1 = linep;
+					cp2 = &getenv("PATH")[p];
+					continue;
+				}
+				cp1++;
 			}
-			cp1++;
+			*cp1++ = '/';
+			cp2 = *t->DARR;
+			while((*cp1++ = *cp2++));
+			texec(linep, t);
+			prs(*t->DARR);
+			err(": not found",255);
+			exit(255);
 		}
-		*cp1++ = '/';
-		cp2 = *t->DARR;
-		while((*cp1++ = *cp2++));
-		texec(linep, t);
-		prs(t->DARR[0]);
-		err(ERR_FOUND, 255);
-		exit(255);
 
 	case TFIL:
 		f = t->DFLG;
@@ -777,14 +840,14 @@ texec(char *f, struct tree *at)
 	if (errno==ENOEXEC) {
 		if (*linep)
 			t->DPTR = linep;
-		t->DSPT = "/bin/sh";
+		t->DSPT = "/usr/bin/osh";
 		execv(t->DSPT, &t->DSPT);
 		prs("No shell!\n");
 		exit(255);
 	}
 	if (errno==ENOMEM) {
-		prs(t->DARR[0]);
-		err(ERR_LARGE, 255);
+		prs(*t->DARR);
+		err(": too large",255);
 		exit(255);
 	}
 }
@@ -884,222 +947,5 @@ pwait(int i)
 		if (e || (s&&stoperr))
 			err("", (s>>8)|e );
 		errval |= (s>>8);
-	}
-}
-
-static char	subchar = '$';	/* variable marker, may be changed by pump */
-
-/*	flag: !DOLREPL ==> no substitution, DOLREPL ==> substitute,
-	DOLREPQ ==> quoted substitution: "$1" = value of $1 for sure */
-static int
-getc(register int flag)
-{
-	register char c;
-
-	if(peekc) {
-		c = peekc;
-		peekc = 0;
-		return(c);
-	}
-	if(argp > eargp) {
-		argp -= 10;
-		while((c=getc(!DOLREPL)) != '\n');
-		argp += 10;
-		err(ERR_ARGS, 255);
-		gflg++;
-		return(c);
-	}
-	if(linep > elinep) {
-		linep -= 10;
-		while((c=getc(!DOLREPL)) != '\n');
-		linep += 10;
-		err(ERR_CHAR, 255);
-		gflg++;
-		return(c);
-	}
-getd:
-	if(dolp) {
-		if (c = *dolp++) {
-			if (flag == DOLREPQ)
-				c |= QUOTE;
-			return c;
-		}
-		if (idolp && ++idolp < dolc) {
-			dolp = dolv[idolp];
-			return(' ');
-		}
-		dolp = 0;
-	}
-	c = readc();
-	if(c == subchar && flag) {
-		c = readc();
-		if(c>='0' && c<='9') {
-			if(c-'0' < dolc)
-				dolp = dolv[c-'0'];
-			goto getd;
-		}
-		else if(c>='a' && c<='z') {
-			dolp = seta[c-'a'];
-			goto getd;
-		}
-		else if(c == '$') {
-			dolp = pidp;
-			goto getd;
-		}
-		/* $* = $1 $2 .... */
-		else if (c == '*') {
-			if (dolc > 1) {
-				idolp = 1;
-				dolp = dolv[1];
-			}
-			goto getd;
-		}
-		else
-			if(c != '\n')  c = readc();
-	}
-	return(c&0177);
-}
-
-static void
-word(void)
-{
-	register char c, c1;
-	register dolflag;
-
-	*argp++ = linep;
-
-loop:
-	switch(c = getc(DOLREPL)) {
-
-	case ' ':
-	case '\t':
-		goto loop;
-
-	case '\'':	/* '...' : what you see is what you get */
-	case '"':	/* "..." : \", \$, $ substitution */
-		c1 = c;
-		dolflag = (c == '"' && !dolp) ? DOLREPQ : !DOLREPL;
-		while((c=getc(dolflag)) != c1) {
-			if(c == '\n') {
-				error++;
-				peekc = c;
-				return;
-			}
-			if (c1 == '"' && c == '\\' &&
-				((peekc = getc(!DOLREPL)) == '$' ||
-				peekc == '"')) {
-					c = peekc;
-					peekc = 0;
-			}
-			*linep++ = c|QUOTE;
-		}
-		goto pack;
-
-	case '&':
-	case '|':
-		*linep++ = c;
-		if((peekc=getc(DOLREPL)) == c)
-			peekc = 0;
-		else
-			linep--;
-	case ';':
-	case '<':
-	case '>':
-	case '(':
-	case ')':
-	case '^':
-	case '\n':
-		*linep++ = c;
-		*linep++ = '\0';
-		return;
-	case '\\':
-		if ((c=getc(!DOLREPL))=='\n') goto loop;
-		else {
-			c |= QUOTE;
-			break;
-		}
-	}
-
-	peekc = c;
-
-pack:
-	for(;;) {
-		if ((c = getc(DOLREPL))=='\\') {
-			if ((c=getc(!DOLREPL))=='\n') c = ' ';
-			else c |= QUOTE;
-		}
-		if(any(c, " '\"\t;&<>()|^\n")) {
-			peekc = c;
-			if(any(c, "\"'"))
-				goto loop;
-			*linep++ = '\0';
-			return;
-		}
-		*linep++ = c;
-	}
-}
-
-static char *
-rdval(int pipef, char *lef, char *na)
-{
-	register char *st, *np;
-	char c;
-
-	st = endptr;
-	np = na;
-	if(!pipef && lef) {
-		pipef = eq(lef, "--") ? dup(oldfil0) : open(lef, 0);
-		if(pipef<0)  return 0;
-	}
-	for(;;) {
-		if(endptr >= endcore-10)
-			if((endcore=sbrk(64))<0) return 0;
-		if(!na) {
-			if(read(pipef, &c, 1) <= 0) {
-				setxcod(1);	/* EOF indicator */
-				break;
-			}
-		} else c = *np++ & 0177;
-		*endptr++ = c;
-		if(c=='\n' || c=='\0') break;
-	}
-	if(c=='\n') --endptr;
-	*endptr++ = '\0';
-	if(pipef || lef) close(pipef);
-	return st;
-}
-
-static char exitstr[6];
-
-static void
-setxcod(int code)
-{
-	copy(itoa(code), exitstr);
-	seta[R] = exitstr;
-}
-
-static void
-copy(register char *source, register char *sink)
-{
-	 while(*sink++ = *source++ & 0177);
-}
-
-static int wide = 5;
-
-static char *
-itoa(int n)
-{
-	register int i, j;
-	register char *cp;
-	static char str[12];
-
-	j = n;
-	cp = &str[sizeof str - 1];
-	for(;;) {
-		*cp = j % 10 + '0';
-		j /= 10;
-		if(j == 0)
-			return cp;
-		cp--;
 	}
 }
