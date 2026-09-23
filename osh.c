@@ -82,7 +82,7 @@
 #define	ENOMEM	12
 #define	ENOEXEC 8
 
-struct tree {
+static struct tree {
   int t_dtyp;
   int t_dflg;
   union {
@@ -102,26 +102,26 @@ struct tree {
     char *t_darr[TRESIZ];
   } t_dcom;
 } trebuf[TRESIZ];
-int treec;
-int errval;
-char	*dolp;
-char	pidp[6];
-char	**dolv;
+static int treec;
+static int errval;
+static char	*dolp;
+static char	pidp[6];
+static char	**dolv;
 jmp_buf	jmpbuf;
-int	dolc;
-char	*promp;
-char	*linep;
-char	*elinep;
-char	**argp;
-char	**eargp;
-char	peekc;
-char	gflg;
-char	error;
-char	uid;
-char	setintr;
-char	*arginp;
-int	onelflg;
-int	stoperr;
+static int	dolc;
+static char	*promp;
+static char	*linep;
+static char	*elinep;
+static char	**argp;
+static char	**eargp;
+static char	peekc;
+static char	gflg;
+static char	error;
+static char	uid;
+static char	setintr;
+static char	*arginp;
+static int	onelflg;
+static int	stoperr;
 
 #define	NSIG	sizeof mesg / sizeof *mesg
 char	*mesg[] = {
