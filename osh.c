@@ -124,7 +124,7 @@ static int	onelflg;
 static int	stoperr;
 
 #define	NSIG	sizeof mesg / sizeof *mesg
-char	*mesg[] = {
+static char	*mesg[] = {
 	0,
 	"Hangup",
 	0,
@@ -143,8 +143,8 @@ char	*mesg[] = {
 	"Terminated",
 };
 
-char	line[LINSIZ];
-char	*args[ARGSIZ];
+static char	line[LINSIZ];
+static char	*args[ARGSIZ];
 
 static int main1(void);
 static int word(void);
