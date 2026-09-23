@@ -82,6 +82,13 @@
 #define	ENOMEM	12
 #define	ENOEXEC 8
 
+#define N 'n'-'a'
+#define P 'p'-'a'
+#define R 'r'-'a'
+#define S 's'-'a'
+#define T 't'-'a'
+#define W 'w'-'a'
+#define Z 'z'-'a'
 #define DOLREPL 1
 #define DOLREPQ 2
 
@@ -151,6 +158,18 @@ static char	*mesg[] = {
 static char	line[LINSIZ];
 static char	*args[ARGSIZ];
 
+#define ERR_SYNTAX "syntax error"
+#define ERR_EQUALS "'=' error"
+#define ERR_BADDIR ": bad directory"
+#define ERR_COUNT ": arg count"
+#define ERR_AGAIN "try again"
+#define ERR_OPEN ": cannot open"
+#define ERR_CREATE ": cannot create"
+#define ERR_FOUND ": not found"
+#define ERR_LARGE ": too large"
+
+static char *itoa(int);
+static void copy(char *, char *);
 static void main1(void);
 static void word(void);
 static struct tree *tree(void);
@@ -172,6 +191,7 @@ static void prn(int);
 static int any(int, char *);
 static int equal(char *, char *);
 static void pwait(int);
+static void setxcod(int);
 
 int
 main(int c, char *av[])
@@ -214,7 +234,7 @@ main(int c, char *av[])
 			f = open(v[1], 0);
 			if(f < 0) {
 				prs(v[1]);
-				err(": cannot open",255);
+				err(ERR_OPEN, 255);
 			}
 		}
 	}
@@ -261,7 +281,7 @@ main1(void)
 			t = syntax(args, argp);
 		}
 		if(error != 0)
-			err("syntax error",255); else
+			err(ERR_SYNTAX, 255); else
 			execute(t, 0, 0);
 	}
 }
@@ -547,13 +567,38 @@ execute(struct tree *t, int *pf1, int *pf2)
 		int p;
 
 	case TCOM:
-		cp1 = *t->DARR;
+		cp1 = t->DARR[0];
+		if (equal(cp1, "="))
+		{
+			if(t->DFLG&FPIN) close(pf1[1]);
+			i = *cp2 - 'a';
+			if(t->DARR[3] != 0 && eq(t->DARR[2], "")) {
+				t->DARR[2] = t->DARR[3];
+				setxcod(1);
+			}
+				/* 3rd exists & null 2nd ==> use 3rd instead */
+			if(i>25 || i<0)
+				err(ERR_EQUALS, 255);
+			f = t->DFLG&FPIN;
+			if ((seta[i] = rdval((f ? pf1[0] : 0),
+				t[DLEF], t[DCOM+2]))==0)
+				err(ERR_EQUALS, 255);
+			if (f) {	/* piped, must assure synch */
+				pwait(savdlef[DSPR], savdlef);
+				bsynch(2);
+			}
+			break;
+		}
 		if(equal(cp1, "chdir")) {
 			if(t->DARR[1] != 0) {
-				if(chdir(t->DARR[1]) < 0)
-					err("chdir: bad directory",255);
-			} else
-				err("chdir: arg count",255);
+				if(chdir(t->DARR[1]) > 0) {
+					prs(cp1);
+					err(ERR_BADDIR, 255);
+				}
+			} else {
+				prs(cp1);
+				err(ERR_COUNT, 255);
+			}
 			break;
 		}
 		if(equal(cp1, "shift")) {
@@ -593,7 +638,7 @@ execute(struct tree *t, int *pf1, int *pf2)
 		if((f&FPAR) == 0)
 			i = fork();
 		if(i == -1) {
-			err("try again",255);
+			err(ERR_AGAIN, 255);
 			break;
 		}
 		if(i != 0) {
@@ -616,7 +661,7 @@ execute(struct tree *t, int *pf1, int *pf2)
 			i = open(t->DLPT, 0);
 			if(i < 0) {
 				prs(t->DLPT);
-				err(": cannot open",255);
+				err(ERR_OPEN, 255);
 				exit(255);
 			}
 		}
@@ -631,7 +676,7 @@ execute(struct tree *t, int *pf1, int *pf2)
 			i = creat(t->DRPT, 0666);
 			if(i < 0) {
 				prs(t->DRPT);
-				err(": cannot create",255);
+				err(ERR_CREATE, 255);
 				exit(255);
 			}
 f1:
@@ -696,8 +741,8 @@ f1:
 		cp2 = *t->DARR;
 		while((*cp1++ = *cp2++));
 		texec(linep, t);
-		prs(*t->DARR);
-		err(": not found",255);
+		prs(t->DARR[0]);
+		err(ERR_FOUND, 255);
 		exit(255);
 
 	case TFIL:
@@ -732,14 +777,14 @@ texec(char *f, struct tree *at)
 	if (errno==ENOEXEC) {
 		if (*linep)
 			t->DPTR = linep;
-		t->DSPT = "/usr/bin/osh";
+		t->DSPT = "/bin/sh";
 		execv(t->DSPT, &t->DSPT);
 		prs("No shell!\n");
 		exit(255);
 	}
 	if (errno==ENOMEM) {
-		prs(*t->DARR);
-		err(": too large",255);
+		prs(t->DARR[0]);
+		err(ERR_LARGE, 255);
 		exit(255);
 	}
 }
@@ -860,7 +905,7 @@ getc(register int flag)
 		argp -= 10;
 		while((c=getc(!DOLREPL)) != '\n');
 		argp += 10;
-		err("Too many args", 255);
+		err(ERR_ARGS, 255);
 		gflg++;
 		return(c);
 	}
@@ -868,7 +913,7 @@ getc(register int flag)
 		linep -= 10;
 		while((c=getc(!DOLREPL)) != '\n');
 		linep += 10;
-		err("Too many characters", 255);
+		err(ERR_CHAR, 255);
 		gflg++;
 		return(c);
 	}
@@ -991,5 +1036,70 @@ pack:
 			return;
 		}
 		*linep++ = c;
+	}
+}
+
+static char *
+rdval(int pipef, char *lef, char *na)
+{
+	register char *st, *np;
+	char c;
+
+	st = endptr;
+	np = na;
+	if(!pipef && lef) {
+		pipef = eq(lef, "--") ? dup(oldfil0) : open(lef, 0);
+		if(pipef<0)  return 0;
+	}
+	for(;;) {
+		if(endptr >= endcore-10)
+			if((endcore=sbrk(64))<0) return 0;
+		if(!na) {
+			if(read(pipef, &c, 1) <= 0) {
+				setxcod(1);	/* EOF indicator */
+				break;
+			}
+		} else c = *np++ & 0177;
+		*endptr++ = c;
+		if(c=='\n' || c=='\0') break;
+	}
+	if(c=='\n') --endptr;
+	*endptr++ = '\0';
+	if(pipef || lef) close(pipef);
+	return st;
+}
+
+static char exitstr[6];
+
+static void
+setxcod(int code)
+{
+	copy(itoa(code), exitstr);
+	seta[R] = exitstr;
+}
+
+static void
+copy(register char *source, register char *sink)
+{
+	 while(*sink++ = *source++ & 0177);
+}
+
+static int wide = 5;
+
+static char *
+itoa(int n)
+{
+	register int i, j;
+	register char *cp;
+	static char str[12];
+
+	j = n;
+	cp = &str[sizeof str - 1];
+	for(;;) {
+		*cp = j % 10 + '0';
+		j /= 10;
+		if(j == 0)
+			return cp;
+		cp--;
 	}
 }
