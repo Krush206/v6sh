@@ -107,7 +107,7 @@ static int errval;
 static char	*dolp;
 static char	pidp[6];
 static char	**dolv;
-jmp_buf	jmpbuf;
+static jmp_buf	jmpbuf;
 static int	dolc;
 static char	*promp;
 static char	*linep;
