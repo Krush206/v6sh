@@ -232,7 +232,7 @@ loop:
 }
 
 static int
-main1()
+main1(void)
 {
 	register char  *cp;
 	register struct tree *t;
@@ -262,7 +262,7 @@ main1()
 }
 
 static int
-word()
+word(void)
 {
 	register char c, c1;
 
@@ -318,7 +318,7 @@ pack:
 	}
 }
 
-static struct tree *tree()
+static struct tree *tree(void)
 {
 	if(treec == TRESIZ) {
 		prs("Command line overflow\n");
