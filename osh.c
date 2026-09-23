@@ -1040,15 +1040,14 @@ rdval(int i, char *na)
 
 	st = seta[i];
 	np = na;
-	if(np == NULL) {
-		*st = '\0';
-		return;
-	}
+	if(np == 0)
+		goto null;
 	for (;;) {
 		c = *np++ & 0177;
 		*st++ = c;
 		if(c=='\n' || c=='\0') break;
 	}
 	if(c=='\n') st++;
+null:
 	*st = '\0';
 }
