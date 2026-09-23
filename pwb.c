@@ -4,24 +4,10 @@
  * 2.44 of 5/26/77
  */
 
-#include <dirent.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <glob.h>
-#include <pwd.h>
-#include <setjmp.h>
-#include <signal.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/times.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <time.h>
-#include <unistd.h>
+#include	"errnos.h"
+#include	"stat.h"
 #define NOFILE	15	/* max open files per process */
-static char SCCSID[] = "@(#)sh.c 2.44";
+static char SCCSID[] "@(#)sh.c 2.44";
 
 #define	INTR	2
 #define	QUIT	3
@@ -46,16 +32,12 @@ static char SCCSID[] = "@(#)sh.c 2.44";
 #define TOR  5
 #define TAND 6
 
-#define DTYP t_dtyp
-#define DLEF t_dlef.t_dltr
-#define DRIT t_drit.t_drtr
-#define DFLG t_dflg
-#define DARR t_dcom.t_darr
-#define DPTR t_dcom.t_dptr
-#define DSPT t_dspr.t_dptr
-#define DSTR t_dspr.t_dtre
-#define DLPT t_dlef.t_dlpt
-#define DRPT t_drit.t_drpt
+#define DTYP 0
+#define DFLG 1
+#define DLEF 2
+#define DRIT 3
+#define DSPR 4
+#define DCOM 5
 #define N 'n'-'a'
 #define P 'p'-'a'
 #define R 'r'-'a'
@@ -66,94 +48,75 @@ static char SCCSID[] = "@(#)sh.c 2.44";
 #define DOLREPL 1
 #define DOLREPQ	2
 
-static jmp_buf error_jmp;
-#define setexit() setjmp(error_jmp)
-#define reset() longjmp(error_jmp, 1)
+extern errno;
 /*	BSIZ = buffer for tty, BSIZFIL = size for file, 1 = size for pipe */
 #define BSIZ 64
 #define BSIZFIL	512
-static struct {
+struct {
 	long start;	/* absolute file addr of char in buf[0] */
 	long linloc;	/* loc of begin of line for while processing */
 	int gotten;	/* number of bytes read in last actual read */
 	int nleft;
 	char *nextp;
 } b;
-static char	bstate;	/* primary state var for control of buffering */
+char	bstate;	/* primary state var for control of buffering */
 		/* 0 ==> BNOW right; real I/O ptr set at BEND (internal I/O) */
 		/* 1 ==> real ptr has been set from BNOW (pre-exec) */
 		/* 2 ==> post-exec - internals must be reset */
 		/* pre-exec: 0->1; post-exec: 1->2; int cmd: 2->0 */
 		/* pump begin: 1->0 */
-static char	b1char;	/* input buffer: 1 at a time */
-static char	*bbuf = &b1char;	/* addr of actual buffer */
+char	b1char;	/* input buffer: 1 at a time */
+char	*bbuf	&b1char;	/* addr of actual buffer */
 #define	BNOW	(b.start + (b.gotten - b.nleft))
 #define	BEND	(b.start + b.gotten)
-static int bnread = BSIZ;	/* must change to 1 if found to be in pipe */
+int bnread BSIZ;	/* must change to 1 if found to be in pipe */
 
 #define ACNAME	"/etc/sha"
 
-static struct tree {
-  int t_dtyp;
-  int t_dflg;
-  union {
-    struct tree *t_dltr;
-    char *t_dlpt;
-  } t_dlef;
-  union {
-    struct tree *t_drtr;
-    char *t_drpt;
-  } t_drit;
-  union {
-    char *t_dptr;
-    struct tree *t_dtre;
-  } t_dspr;
-  union {
-    char *t_dptr;
-    char *t_darr[TRESIZ];
-  } t_dcom;
-} trebuf[TRESIZ];
-int treec;
-static char	*dolp;
-static int	idolp;
-static int	oldfil0;	/* fildes for original file 0 */
-static char	pidp[6], argstr[6];
-static int	wide = 5; /* glitch for 5char pid # */
-static char	devtty[10];
-static int	ldivr;
-static char	**dolv;
-static int	dolc;
-static char	*promp, *opromp, *optpromp;
-static char	*linep;
-static char	*elinep;
-static char	**argp;
-static char	**eargp;
-static char	peekc;
-static char	gflg;
-static char	error;
-static char	acctf;	/*	<= 0 ==> no acctg at all, >0 ==> acctg */
-static char	acctfi;	/*	= 0 ==> no acctg for internal cmds */
-static char	uid;
-static char	setintr;
-static char	*arginp;
-static char	onelflg;
-static char	rflg;
-static int	exitcode;
-static char	exitstr[6] ;
-static char	*seta[26];
-static char	*endcore, *endptr;
-static int	wasintr;
-static char	gointr[32];
-static char	proflag;	/* 1 ==> inside .profile */
+char	*dolp;
+int	idolp;
+int	oldfil0;	/* fildes for original file 0 */
+char	pidp[6], argstr[6];
+int	wide 5; /* glitch for 5char pid # */
+char	devtty[10];
+int	ldivr;
+char	**dolv;
+int	dolc;
+char	*promp, *opromp, *optpromp;
+char	*linep;
+char	*elinep;
+char	**argp;
+char	**eargp;
+int	*treep;
+int	*treeend;
+char	peekc;
+char	gflg;
+char	error;
+char	acctf;	/*	<= 0 ==> no acctg at all, >0 ==> acctg */
+char	acctfi;	/*	= 0 ==> no acctg for internal cmds */
+char	uid;
+char	setintr;
+char	*arginp;
+char	onelflg;
+char	rflg;
+int	exitcode;
+char	exitstr[6] ;
+char	*seta[26];
+char	*endcore, *endptr;
+int	oldintr;	/* save INTR state existing at start */
+int	wasintr;
+char	gointr[32];
+int	catchintr();
+char	proflag;	/* 1 ==> inside .profile */
 			/* 2 ==> interrupt in .profile */
-static char	redirf;	/* 1 ==> I/O redirection of input; controls pump rebuffering */
-static char	optfv;		/* 0 ==> +v, 1 ==> -v; -v ==> print commands */
+char	redirf;	/* 1 ==> I/O redirection of input; controls pump rebuffering */
+char	optfv;		/* 0 ==> +v, 1 ==> -v; -v ==> print commands */
 
 
-static struct stat sb;
+struct statb sb;
 
 /*	commands performed internally */
-static char	*comint[] = {
+char	*comint[] {
 	"chdir",	/* 0 */
 	"shift",	/* 1 */
 	"login",	/* 2 */
@@ -213,11 +176,11 @@ static char	*comint[] = {
 #define	END	comint[ZEND]
 
 /*	other keywords */
-static char	THEN[] = "then";
-static char	*ARG0, *ARG1;	/* for diagnostics & internal commands */
-static int	COMTYPE;	/* code for command, -1, or one of Z* */
+char	THEN[]	"then";
+char	*ARG0, *ARG1;	/* for diagnostics & internal commands */
+int	COMTYPE;	/* code for command, -1, or one of Z* */
 
-static char	*mesg[] = {
+char	*mesg[] {
 	0,
 	"Hangup",
 	0,
@@ -241,26 +204,26 @@ static char	*mesg[] = {
 };
 
 /*	messages */
-static char	*SYNTAX = "syntax error: ";
-static char	*MISS = "missing ";
-static char	*MISSL = "missing label: ";
-static char	*NONUM = "non-numeric arg: ";
+char	*SYNTAX	"syntax error: ";
+char	*MISS	"missing ";
+char	*MISSL	"missing label: ";
+char	*NONUM	"non-numeric arg: ";
 
-static char	*ARGCNT = "arg count";
-static char	*ARGLNG = "arg list too long";
-static char	*BADARG = "bad arg: ";
-static char	*CANTEX = "cannot execute";
-static char	*CANTOP = "cannot open: ";
-static char	*NOTPER = "not permitted";
-static char	*NOTWHI = "used outside loop";
-static char	*EQERR = "`=' error";
+char	*ARGCNT	"arg count";
+char	*ARGLNG "arg list too long";
+char	*BADARG	"bad arg: ";
+char	*CANTEX	"cannot execute";
+char	*CANTOP	"cannot open: ";
+char	*NOTPER	"not permitted";
+char	*NOTWHI	"used outside loop";
+char	*EQERR	"`=' error";
 
-static struct stime {
+struct stime {
 	long procu, procs, childu, childs, curtim;
 } timeb;
 
 
-static struct {
+struct {
 	char cname[8];
 	char lname[6];
 	char shtty;
@@ -271,128 +234,23 @@ static struct {
 	long bsyst;
 } tbuf;
 
-static char *logtty(void);
-static char *logname(void);
-static char *logdir(void);
-static char *itoa(int);
-static char *sname(char *);
-static char *nxtarg(void);
-static struct tree *tree(void);
-static struct tree *syntax(char **, char **);
-static struct tree *syn1(char **, char **);
-static struct tree *syn1a(char **, char **);
-static struct tree *syn1b(char **, char **);
-static struct tree *syn2(char **, char **);
-static struct tree *syn3(char **, char **);
-static char *rdval(int, char *, char *);
-static char *pcat(char *, char *, char *, int);
-static int pexline(char *, char *, int, char **, char **);
-static char *cat(char *, char *);
-static void main1(void);
-static void word(void);
-static int getc(int);
-static void scan(struct tree *, int (*)(void));
-static void tglob(char *);
-static int trim(char *);
-static void execute(struct tree *, int *, int *);
-static void toend(void);
-static int lookup(char *);
-static int dofork(void);
-static void fclean(void);
-static void texec(char *, struct tree *);
-static void catchpipe(void);
-static void catchintr(void);
-static void dopump(char **);
-static int atoi(char *);
-static void xdie(char *, char *);
-static void die(char *, char *);
-static void err(char *);
-static void prs(char *);
-static void putc(int);
-static int any(char, char *);
-static int eq(char *, char *);
-static void initacct(void);
-static void pwait(int, int *);
-static int acct(struct tree *);
-static void enacct(char *, int);
-static void setxcod(int);
-static void copy(char *, char *);
-static void copyn(char *, char *, int);
-static int exp(void);
-static int e1(void);
-static int e2(void);
-static int e3(void);
-static int tio(char *, int);
-static int search(int, int);
-static int getword(char *);
-static int readc(void);
-static int eoferr(void);
-static int bflush(void);
-static int bsynch(int);
-static int bseek(long);
-static int setwhere(void);
-static int pexinit(void);
-static int etcglob(char *[]);
-static int expand(char *);
-static int sort(char **);
-static int match(char *, char *);
-static int amatch(char *, char *);
-static int umatch(char *, char *);
-static int compar(char *, char *);
-static void gdie(char *);
-static void (*oldintr)(int);	/* save INTR state existing at start */
+long tell();
+char *logtty(), *nxtarg(), *sname();
 
 /*	following items implement while -- end stack of WDEEP levels */
 #define	WDEEP	3
 #define INWHILE	(wtop < WDEEP)
-static struct {
+struct {
 	long sloc;	/* starting loc = addr of while */
 	long eloc;	/* ending loc = addr of line AFTER end */
 } wstk[WDEEP];
-static int	wtop = WDEEP;	/* top of stack */
+int	wtop	WDEEP;	/* top of stack */
 
-/*
- * The PWB library supplied these account/login helpers.  Use the POSIX
- * equivalents so the shell no longer depends on a site-specific library.
- */
-static char *
-logtty(void)
+main(c, av)
+int c;
+char **av;
 {
-	static char tty[2];
-	const char *name = ttyname(STDIN_FILENO);
-
-	tty[0] = name && *name ? name[strlen(name) - 1] : 'x';
-	tty[1] = '\0';
-	return tty;
-}
-
-static char *
-logname(void)
-{
-	const char *name = getlogin();
-
-	if (name)
-		return (char *)name;
-	return "unknown";
-}
-
-static char *
-logdir(void)
-{
-	struct passwd *pw = getpwuid(getuid());
-	const char *home = getenv("HOME");
-
-	if (home && *home)
-		return (char *)home;
-	if (pw && pw->pw_dir)
-		return pw->pw_dir;
-	return "/";
-}
-
-static int
-main(int c, char *argv[])
-{
-	register int f;
+	register f;
 	register char *p, **v;
 	copy(itoa(getpid()), pidp);
 	copy("/dev/tty",devtty);
@@ -496,15 +354,14 @@ loop:
 }
 
 
-static char line[LINSIZ];
+char line[LINSIZ];
 
-static void
-main1(void)
+main1()
 {
 	char *args[ARGSIZ];
-	struct tree trebuf[TRESIZ];
+	int trebuf[TRESIZ];
 	register char c, *cp;
-	register struct tree *t;
+	register *t;
 
 	argp = args;
 	eargp = args+ARGSIZ-5;
@@ -543,8 +400,7 @@ main1(void)
 }
 
 
-static void
-word(void)
+word()
 {
 	register char c, c1;
 	register dolflag;
@@ -598,7 +454,7 @@ loop:
 	case '\\':
 		if ((c=getc(!DOLREPL))=='\n') goto loop;
 		else {
-			c |= QUOTE;
+			c =| QUOTE;
 			break;
 		}
 	}
@@ -609,7 +465,7 @@ pack:
 	for(;;) {
 		if ((c = getc(DOLREPL))=='\\') {
 			if ((c=getc(!DOLREPL))=='\n') c = ' ';
-			else c |= QUOTE;
+			else c =| QUOTE;
 		}
 		if(any(c, " '\"\t;&<>()|^\n")) {
 			peekc = c;
@@ -622,12 +478,28 @@ pack:
 	}
 }
 
-static char	subchar = '$';	/* variable marker, may be changed by pump */
+
+tree(n)
+int n;
+{
+	register *t;
+
+	t = treep;
+	treep =+ n;
+	if (treep>treeend) {
+		prs("Command line overflow\n");
+		error++;
+		reset();
+	}
+	return(t);
+}
+
+char	subchar	'$';	/* variable marker, may be changed by pump */
 
 /*	flag: !DOLREPL ==> no substitution, DOLREPL ==> substitute,
 	DOLREPQ ==> quoted substitution: "$1" = value of $1 for sure */
-static int
-getc(register int flag)
+getc(flag)
+register flag;
 {
 	register char c;
 
@@ -637,17 +509,17 @@ getc(register int flag)
 		return(c);
 	}
 	if(argp > eargp) {
-		argp -= 10;
+		argp =- 10;
 		while((c=getc(!DOLREPL)) != '\n');
-		argp += 10;
+		argp =+ 10;
 		err("Too many args");
 		gflg++;
 		return(c);
 	}
 	if(linep > elinep) {
-		linep -= 10;
+		linep =- 10;
 		while((c=getc(!DOLREPL)) != '\n');
-		linep += 10;
+		linep =+ 10;
 		err("Too many characters");
 		gflg++;
 		return(c);
@@ -656,7 +528,7 @@ getd:
 	if(dolp) {
 		if (c = *dolp++) {
 			if (flag == DOLREPQ)
-				c |= QUOTE;
+				c =| QUOTE;
 			return c;
 		}
 		if (idolp && ++idolp < dolc) {
@@ -703,8 +575,8 @@ getd:
  *	syn1
  */
 
-static struct tree *
-syntax(register char **p1, register char **p2)
+syntax(p1, p2)
+register char **p1, **p2;
 {
 
 	while(p1 != p2) {
@@ -724,11 +596,11 @@ syntax(register char **p1, register char **p2)
  *	syn1a ; syntax
  */
 
-static struct tree *
-syn1(char **p1, char **p2)
+syn1(p1, p2)
+char **p1, **p2;
 {
 	register char **p;
-	register struct tree *t, *t1;
+	register *t, *t1;
 	int l;
 
 	l = 0;
@@ -752,15 +624,15 @@ syn1(char **p1, char **p2)
 	case '\n':
 		if(l == 0) {
 			l = **p;
-			t = tree();
-			t->DTYP = TLST;
-			t->DLEF = syn1a(p1, p);
-			t->DFLG = 0;
+			t = tree(4);
+			t[DTYP] = TLST;
+			t[DLEF] = syn1a(p1, p);
+			t[DFLG] = 0;
 			if(l == '&') {
-				t1 = t->DLEF;
-				t1->DFLG |= FAND|FPRS|FINT;
+				t1 = t[DLEF];
+				t1[DFLG] =| FAND|FPRS|FINT;
 			}
-			t->DRIT = syntax(p+1, p2);
+			t[DRIT] = syntax(p+1, p2);
 			return(t);
 		}
 	}
@@ -776,12 +648,11 @@ syn1(char **p1, char **p2)
  *	syn1b || syn1a
  */
 
-static struct tree *
-syn1a(char **p1, char **p2)
+syn1a(p1,p2)
+char **p1, **p2;
 {
 	register char **p;
-	register int l;
-	register struct tree *t;
+	register int l, *t;
 
 	l = 0;
 	for(p=p1; p!=p2; p++)
@@ -799,11 +670,11 @@ syn1a(char **p1, char **p2)
 		if((*p)[1] == '\0')
 			continue;	/* a pipe not an or */
 		if(l == 0) {
-			t = tree();
-			t->DTYP = TOR;
-			t->DLEF = syn1b(p1, p);
-			t->DRIT = syn1a(p+1, p2);
-			t->DFLG = 0;
+			t = tree(4);
+			t[DTYP] = TOR;
+			t[DLEF] = syn1b(p1, p);
+			t[DRIT] = syn1a(p+1, p2);
+			t[DFLG] = 0;
 			return(t);
 		}
 	}
@@ -817,12 +688,11 @@ syn1a(char **p1, char **p2)
  *	syn2 && syn1b
  */
 
-static struct tree *
-syn1b(char **p1, char **p2)
+syn1b(p1,p2)
+char **p1, **p2;
 {
 	register char **p;
-	register int l;
-	register struct tree *t;
+	register int l, *t;
 
 	l = 0;
 	for(p=p1; p!=p2; p++)
@@ -838,11 +708,11 @@ syn1b(char **p1, char **p2)
 
 	case '&':
 		if(l == 0) {
-			t = tree();
-			t->DTYP = TAND;
-			t->DLEF = syn2(p1, p);
-			t->DRIT = syn1b(p+1, p2);
-			t->DFLG = 0;
+			t = tree(4);
+			t[DTYP] = TAND;
+			t[DLEF] = syn2(p1, p);
+			t[DRIT] = syn1b(p+1, p2);
+			t[DFLG] = 0;
 			return(t);
 		}
 	}
@@ -856,8 +726,8 @@ syn1b(char **p1, char **p2)
  *	syn3 | syn2
  */
 
-static struct tree *
-syn2(char **p1, char **p2)
+syn2(p1, p2)
+char **p1, **p2;
 {
 	register char **p;
 	register int l, *t;
@@ -877,11 +747,11 @@ syn2(char **p1, char **p2)
 	case '|':
 	case '^':
 		if(l == 0) {
-			t = tree();
-			t->DTYP = TFIL;
-			t->DLEF = syn3(p1, p);
-			t->DRIT = syn2(p+1, p2);
-			t->DFLG = 0;
+			t = tree(4);
+			t[DTYP] = TFIL;
+			t[DLEF] = syn3(p1, p);
+			t[DRIT] = syn2(p+1, p2);
+			t[DFLG] = 0;
 			return(t);
 		}
 	}
@@ -895,17 +765,17 @@ syn2(char **p1, char **p2)
  *	word word* [ < in ] [ > out ]
  */
 
-static struct tree *
-syn3(char **p1, char **p2)
+syn3(p1, p2)
+char **p1, **p2;
 {
 	register char **p;
 	char **lp, **rp;
-	register struct tree *t;
+	register *t;
 	int n, l, i, o, c, flg;
 
 	flg = 0;
 	if(**p2 == ')')
-		flg |= FPAR;
+		flg =| FPAR;
 	lp = 0;
 	rp = 0;
 	i = 0;
@@ -934,7 +804,7 @@ syn3(char **p1, char **p2)
 		p++;
 		if (p1 != p2 && **p == '>') {
 			if (l == 0)
-				flg |= FCAT;
+				flg =| FCAT;
 		} else p--;
 
 	case '<':
@@ -965,30 +835,31 @@ syn3(char **p1, char **p2)
 	if(lp != 0) {
 		if(n != 0)
 			error++;
-		t = tree();
-		t->DTYP = TPAR;
-		t->DSPR = syn1(lp, rp);
+		t = tree(5);
+		t[DTYP] = TPAR;
+		t[DSPR] = syn1(lp, rp);
 	} else {
 		if(n == 0)
 			error++;
 		p1[n++] = 0;
-		t = tree();
-		t->DTYP = TCOM;
+		t = tree(n+5);
+		t[DTYP] = TCOM;
 		for(l=0; l<n; l++)
-			t->DARR[l] = p1[l];
+			t[l+DCOM] = p1[l];
 	}
-	t->DFLG = flg;
-	t->DLEF = i;
-	t->DRIT = o;
+	t[DFLG] = flg;
+	t[DLEF] = i;
+	t[DRIT] = o;
 	return(t);
 }
 
 
-static void
-scan(struct tree *at, int (*f)(void))
+scan(at, f)
+int *at;
+int (*f)();
 {
 	register char *p;
-	register struct tree *t;
+	register *t;
 
 	t = at+DCOM;
 	while(p = *t++)
@@ -996,8 +867,8 @@ scan(struct tree *at, int (*f)(void))
 }
 
 
-static void
-tglob(char *s)
+tglob(s)
+char *s;
 {
 	register char *p, c;
 
@@ -1007,23 +878,23 @@ tglob(char *s)
 }
 
 
-static int
-trim(char *s)
+trim(s)
+char *s;
 {
 	register char *p;
 
-	for (p=s; (*p++ &= 0177); );
+	for (p=s; *p++ =& 0177; );
 	return(s);
 }
-static int	ap, ac;		/* arg pointer & count for if & related cmds */
-static char	**av;		/* av[0] = t[DCOM] */
-static int	*savdlef;	/* for cmd piped into, has &t for cmd on other end */
+int	ap, ac;		/* arg pointer & count for if & related cmds */
+char	**av;		/* av[0] = t[DCOM] */
+int	*savdlef;	/* for cmd piped into, has &t for cmd on other end */
 
-static void
-execute(struct tree *t, int *pf1, int *pf2)
+execute(t, pf1, pf2)
+int *t, *pf1, *pf2;
 {
 	int i, f, pv[2], wt;
-	register struct tree *t1;
+	register *t1;
 	register char *cp1, *cp2;
 
 tryagain:	/* if expr command may come back here to do command */
@@ -1394,7 +1265,7 @@ tryagain:	/* if expr command may come back here to do command */
 		}
 		if(t[DTYP] == TPAR) {
 			if(t1 = t[DSPR])
-				t1[DFLG] |= f&FINT;
+				t1[DFLG] =| f&FINT;
 			execute(t1);
 			exit(exitcode);
 		}
@@ -1422,10 +1293,10 @@ tryagain:	/* if expr command may come back here to do command */
 		f = t[DFLG];
 		pipe(pv);
 		t1 = t[DLEF];
-		t1[DFLG] |= FPOU | (f&(FPIN|FINT|FPRS));
+		t1[DFLG] =| FPOU | (f&(FPIN|FINT|FPRS));
 		execute(t1, pf1, pv);
 		t1 = t[DRIT];
-		t1[DFLG] |= FPIN | (f&(FPOU|FINT|FAND|FPRS));
+		t1[DFLG] =| FPIN | (f&(FPOU|FINT|FAND|FPRS));
 		savdlef = t[DLEF];	/* save so can link pipe together */
 		execute(t1, pv, pf2);
 		return;
@@ -1433,10 +1304,10 @@ tryagain:	/* if expr command may come back here to do command */
 	case TLST:
 		f = t[DFLG]&FINT;
 		if(t1 = t[DLEF])
-			t1[DFLG] |= f;
+			t1[DFLG] =| f;
 		execute(t1);
 		if(t1 = t[DRIT])
-			t1[DFLG] |= f;
+			t1[DFLG] =| f;
 		execute(t1);
 		return;
 
@@ -1445,12 +1316,12 @@ tryagain:	/* if expr command may come back here to do command */
 	case TAND:
 		f = t[DFLG]&FINT;
 		t1 = t[DLEF];
-		t1[DFLG] |= f;
+		t1[DFLG] =| f;
 		execute(t1);
 		i = atoi(seta[R]);
 		if ((i == 0) == (t[DTYP] == TAND)) {
 			t1 = t[DRIT];
-			t1[DFLG] |= f;
+			t1[DFLG] =| f;
 			execute(t1);
 		}
 		return;
@@ -1458,8 +1329,7 @@ tryagain:	/* if expr command may come back here to do command */
 	}
 }
 
-static void
-toend(void)
+toend()
 {
 	if (wstk[wtop].eloc == 0) { /* need to find end */
 		ARG1 = 0;
@@ -1470,8 +1340,8 @@ toend(void)
 }
 
 
-static int
-lookup(register char *p)
+lookup(p)
+register char *p;
 {
 	register char *q;
 	register i;
@@ -1481,11 +1351,10 @@ lookup(register char *p)
 	return -1;
 }
 
-static int
-dofork(void)
+dofork()
 {
 	register wt, i;
-	for(wt = 10;; wt += 10) {
+	for(wt = 10;; wt =+ 10) {
 		if ((i = fork()) != -1)
 			break;
 		if (promp == 0 && wt < 60)
@@ -1498,18 +1367,19 @@ dofork(void)
 	return i;
 }
 
-static void
-fclean(void)
+fclean()
 {
 	if (acctf)
 		close(acctf);
 	if (oldfil0)
 		close(oldfil0);
+	return;
 }
 
-static void
-texec(register char *f, register struct tree *t)
+texec(f, t)
+register *t;
 {
+	extern errno;
 	register char *cp;
 	char tline[48];
 	char txe2big, txeacces;
@@ -1542,7 +1412,7 @@ texec(register char *f, register struct tree *t)
 			txe2big++;
 			break;
 		case ETXTBSY:
-			if ((txtbsy += 10) > 60)
+			if ((txtbsy =+ 10) > 60)
 				xdie("text busy", 0);
 			sleep(txtbsy);
 			goto retry;
@@ -1555,13 +1425,13 @@ texec(register char *f, register struct tree *t)
 	xdie("not found", 0);
 }
 
-static char	pipebomb;	/* 1 ==> SIGPIPE caught */
-static void
-catchpipe(void)
+char	pipebomb;	/* 1 ==> SIGPIPE caught */
+catchpipe()
 {
 	if (promp != 0)
 		exit(1);
 	pipebomb++;
+	return;
 }
 
 /*	dopump: pump command:
@@ -1581,8 +1451,8 @@ catchpipe(void)
  *	eofstr is safe because initial arg can't be at beginning
  */
 
-static void
-dopump(register char **t)
+dopump(t)
+register char **t;
 {
 #define	eofstr	line
 #define	pumpwk	(line+96)
@@ -1645,8 +1515,8 @@ dopump(register char **t)
 	exit(pipebomb);
 }
 
-static int
-atoi(char *s)
+atoi(s)
+char *s;
 {
 
 	register char *sp;
@@ -1671,28 +1541,29 @@ atoi(char *s)
 	return neg? -i: i;
 }
 
-static void
-xdie(char *str1, char *str2)
+xdie(str1, str2)
+char *str1, *str2;
 {
 	die(str1, str2);
 	exit(1);
 }
 
-static void
-die(char *str1, char *str2)
+die(str1, str2)
+char *str1, *str2;
 {
 	prs(ARG0);
 	prs(": ");
 	prs(str1);
 	err(str2);
+	return;
 }
 
 /*
  *	err: emit error message, flush input by seeking to EOF (but only
  *␁	if reading from 0 in unrestricted way), exit.
  */
-static void
-err(char *s)
+err(s)
+char *s;
 {
 
 	prs(s);
@@ -1703,8 +1574,8 @@ err(char *s)
 }
 
 
-static void
-prs(register char *s)
+prs(s)
+register char *s;
 {
 
 	if (s == 0)
@@ -1714,16 +1585,15 @@ prs(register char *s)
 }
 
 
-static void
-putc(int c)
+putc(c)
 {
 
 	write(2, &c, 1);
 }
 
 
-static int
-any(register char c, register char *s)
+any(c, s)
+register char c, *s;
 {
 
 	while(*s)
@@ -1733,8 +1603,8 @@ any(register char c, register char *s)
 }
 
 
-static int
-eq(char *s1, char *s2)
+eq(s1, s2)
+register char *s1, *s2;
 {
 
 	if (s1 == 0 || s2 == 0)
@@ -1758,15 +1628,14 @@ eq(char *s1, char *s2)
 	PERMITS BETTER INTERNAL CMD HANDLING.
  */
 
-static void
-initacct(void)
+initacct()
 {
-	register int f;
+	register f;
 	if ((acctf = open(ACNAME, 1)) < 0)
 		acctf = 0;	/* no acctg at all */
 	else {
 		fstat(acctf, &sb);
-		f = sb.st_mode;
+		f = sb.i_mode;
 		if (tbuf.shtty == 'x') {	/* shell proc */
 			if (f & 020) {
 				if (f & 010)
@@ -1781,10 +1650,10 @@ initacct(void)
 	return;
 }
 
-static void
-pwait(int i, int *t)
+pwait(i, t)
+int i, *t;
 {
-	register int p, e, *t1;
+	register p, e, *t1;
 	int nprocs;
 	int s;
 
@@ -1833,8 +1702,8 @@ pwait(int i, int *t)
 }
 
 
-static int
-acct(struct tree *t)
+acct(t)
+int *t;
 {
 	if(t == 0)
 		enacct("**gok", 0);
@@ -1845,12 +1714,12 @@ acct(struct tree *t)
 }
 
 
-static void
-enacct(char *as, int acctype)
-/* 0 ==> child process, 1 ==> internal cmd */
+enacct(as, acctype)
+char *as;
+int acctype;	/* 0 ==> child process, 1 ==> internal cmd */
 {
 	struct stime timbuf;
-	register int i;
+	register i;
 	register char *np;
 
 	if (uid == 0)
@@ -1882,8 +1751,8 @@ enacct(char *as, int acctype)
 }
 
 
-static char *
-rdval(int pipef, char *lef, char *na)
+rdval(pipef, lef, na)
+char *na;
 {
 	register char *st, *np;
 	char c;
@@ -1913,9 +1782,7 @@ rdval(int pipef, char *lef, char *na)
 }
 
 
-static void
-catchintr(void)
-{
+catchintr() {
 	if (proflag)
 		proflag++;	/* in .profile, make sure come out ok */
 	wasintr++;
@@ -1923,11 +1790,10 @@ catchintr(void)
 }
 
 
-static char *
-pcat(register char *so1,
-     register char *so2,
-     char *si,
-     int sz)
+pcat(so1, so2, si, sz)
+register char *so1, *so2;
+char *si;
+int sz;
 {
 	register char *s;
 
@@ -1944,15 +1810,16 @@ pcat(register char *so1,
 }
 
 
-static void
-setxcod(int code)
+setxcod(code)
+int code;
 {
 	copy(itoa(code), exitstr);
 	seta[R] = exitstr;
+	return;
 }
 
-static void
-copy(register char *source, register char *sink)
+copy(source, sink)
+register char *source, *sink;
 {
 	 while(*sink++ = *source++ & 0177);
 }
@@ -1960,45 +1827,41 @@ copy(register char *source, register char *sink)
 /*
  *	copyn: copy at most n bytes from source to sink.
  */
-static void
-copyn(register char *source, register char *sink, int n)
+copyn(source, sink, n)
+register char *source, *sink;
+int	n;
 {
-	register int i;
+	register i;
 	for (i = 0; i < n; i++)
 		if (!(*sink++ = *source++))
 			break;
 }
 
-static char *
-itoa(int n)
-{
-	register int i, j;
+itoa(n) {
+	register i, j;
 	register char *cp;
-	static char str[12];
+	static char *str[12];
 
 	j = n;
-	for(cp = &str[sizeof str - 1]; ;--cp) {
+	for(cp = &str[4]; ;--cp) {
 		if(wide) --wide;
-		*cp = j % 10 + '0';
-		j /= 10;
+		j = ldiv(0, j, 10);
+		*cp = ldivr+'0';
 		if((j | wide) == 0)
 			return cp;
 	}
 }
 
-static char *
-nxtarg(void)
+char *nxtarg()
 {
-	register int iap;
+	register iap;
 
 	if ((iap = ap++) > ac || av[iap] == 0)
 		return(0);
 	return trim(av[iap]);
 }
 
-static int
-exp(void)
-{
+exp() {
 	int p1;
 
 	p1 = e1();
@@ -2007,9 +1870,7 @@ exp(void)
 	return(p1);
 }
 
-static int
-e1(void)
-{
+e1() {
 	int p1;
 
 	p1 = e2();
@@ -2018,18 +1879,14 @@ e1(void)
 	return(p1);
 }
 
-static int
-e2(void)
-{
+e2() {
 	if (eq(nxtarg(), "!"))
 		return(!e3());
 	ap--;
 	return(e3());
 }
 
-static int
-e3(void)
-{
+e3() {
 	int ccode;
 	int nap;
 	int int1, int2;
@@ -2069,17 +1926,17 @@ e3(void)
 	if (eq(a, "-f")) {
 		if (stat(p1, &sb) == -1)
 			return 0;
-		return S_ISREG(sb.st_mode);
+		return ((sb.i_mode & IFMT) == 0);
 	}
 	if (eq(a, "-d")) {
 		if (stat(p1, &sb) == -1)
 			return 0;
-		return S_ISDIR(sb.st_mode);
+		return ((sb.i_mode & IFMT) == IFDIR);
 	}
 	if (eq(a, "-s")) {
 		if (stat(p1, &sb) == -1)
 			return 0;
-		return sb.st_size != 0;
+		return (sb.i_size0 || sb.i_size1);
 	}
 
 	/* string predicates */
@@ -2114,8 +1971,8 @@ erre3:
 	die(SYNTAX, p1);
 }
 
-static int
-tio(char *a, int f)
+tio(a, f)
+char *a; int f;
 {
 	register int fil;
 
@@ -2136,8 +1993,8 @@ tio(char *a, int f)
  *	ZBREAK: unmatched end (break, failed while or end)
  *	levinit = 0, except when called from else if ... then, when it is 1
  */
-static int
-search(int type, int levinit)
+search(type, levinit)
+int type, levinit;
 {
 	register int level, t;
 	register char *aword;
@@ -2210,8 +2067,8 @@ search(int type, int levinit)
 	return 1 if word, 0 if only newline left.
 */
 
-static int
-getword(char *aword)
+getword(aword)
+char *aword;
 {
 	register int found;	/* 1 ==> found word, 0 ==> not */
 	register char c, *wp;
@@ -2244,10 +2101,9 @@ getword(char *aword)
 	return(found);
 }
 
-static int
-readc(void)
+readc()
 {
-	register int c;
+	register c;
 
 	if (arginp) {
 		if (arginp == 1)
@@ -2283,8 +2139,7 @@ readc(void)
 }
 
 /*	eoferr: issue error message if cmd was in middle of search */
-static int
-eoferr(void)
+eoferr()
 {
 	switch (COMTYPE) {
 	case ZGOTO:
@@ -2308,8 +2163,7 @@ eoferr(void)
 }
 
 /*	bflush: complete input flush */
-static int
-bflush(void)
+bflush()
 {
 	seek(0, 0, 2);
 	b.nleft = b.gotten = 0;
@@ -2318,10 +2172,10 @@ bflush(void)
 
 /*	bsynch: synchronize internal buffering & outside world */
 /*	btarg gives nominal target value of bstate */
-static int
-bsynch(register int btarg)
+bsynch(btarg)
+register btarg;
 {
-	register int obstate;
+	register obstate;
 	long f;
 	if (btarg == bstate || promp || bnread == 1 || redirf)
 		return;	/* no seeking in any of these cases */
@@ -2349,8 +2203,8 @@ bsynch(register int btarg)
 }
 
 /*	bseek: seek, staying within current input buffer b, if possible */
-static int
-bseek(long where)
+bseek(where)
+long where;
 {
 	long bend;
 	if (promp || bnread == 1 || redirf)
@@ -2369,7 +2223,8 @@ bseek(long where)
 }
 
 /*	sname: simple name (last component) of file name */
-static char *sname(char *s)
+char *sname(s)
+register char *s;
 {
 	register char *p;
 	for(p = s; *p;)
@@ -2379,12 +2234,11 @@ static char *sname(char *s)
 }
 
 /*	setwhere: set up wherev for $w (1st component of pathname) */
-static char	wherev[6];
-static int
-setwhere(void)
+char	wherev[6];
+setwhere()
 {
 	register char *s, *w;
-	register int i;
+	register i;
 	s = seta[S];
 	seta[W] = w = wherev;
 	i = 0;
@@ -2398,8 +2252,7 @@ setwhere(void)
  *	may be invoked before fork to avoid unnecessary .path opening.
  *	returns 0 if OK, -1 if any error.
  */
-static int
-pexinit(void)
+pexinit()
 {
 	char pathbuf[128 + 16];
 	register n, f;
@@ -2434,12 +2287,10 @@ pexinit(void)
  *	return 0 if OK (or not present), -1 if runs off end in middle of line
  *	or if line too long.
  */
-static int
-pexline(register char *ptr,
-	register char *ptrlim,
-	int psize,
-	char **pret,
-	char **pnext)
+pexline(ptr, ptrlim, psize, pret, pnext)
+register char *ptr, *ptrlim;
+int psize;
+char **pret, **pnext;
 {
 	if (ptr >= ptrlim)
 		return(0);
@@ -2469,13 +2320,13 @@ pexline(register char *ptr,
  */
 
 #define	STRSIZ	5300
-static char	**avx;
-static char	*string;
-static char	*ablimit;
-static int	ncoll;
+char	**avx;
+char	*string;
+char	*ablimit;
+int	ncoll;
 
-static int
-etcglob(char *argv[])
+etcglob(argv)
+char *argv[];
 {
 	char	ab[STRSIZ];		/* generated characters */
 	char	*avxa[500+DCOM];		/* generated arguments */
@@ -2488,36 +2339,59 @@ etcglob(char *argv[])
 		expand(*argv++);
 	if (ncoll == 0)
 		gdie("No match");
-	execvp(avxa[DCOM], &avxa[DCOM]);
-	xdie(avxa[DCOM], CANTEX);
+	texec(avxa[DCOM], avxa);
 }
 
-static int
-expand(char *as)
+expand(as)
+char *as;
 {
-	glob_t matches;
+	register char *s, *cs;
+	register int dirf;
 	char **oavx;
-	size_t i;
+	static struct {
+		int	ino;
+		char	name[16];
+	} entry;
 
-	if (!strpbrk(as, "*?[") ) {
-		*avx++ = cat(as, "");
-		return;
+	s = cs = as;
+	while (*cs!='*' && *cs!='?' && *cs!='[') {
+		if (*cs++ == 0) {
+			*avx++ = cat(s, "");
+			return;
+		}
 	}
-	if (glob(as, 0, 0, &matches) != 0)
-		gdie("No match");
+	for (;;) {
+		if (cs==s) {
+			dirf = open(".", 0);
+			s = "";
+			break;
+		}
+		if (*--cs == '/') {
+			*cs = 0;
+			dirf = open(s==cs? "/": s, 0);
+			*cs++ = 0200;
+			break;
+		}
+	}
+	if (dirf < 0)
+		gdie("No directory");
 	oavx = avx;
-	for (i = 0; i < matches.gl_pathc; i++) {
-		*avx++ = cat("", matches.gl_pathv[i]);
-		ncoll++;
+	while (read(dirf, &entry, 16) == 16) {
+		if (entry.ino==0)
+			continue;
+		if (match(entry.name, cs)) {
+			*avx++ = cat(s, entry.name);
+			ncoll++;
+		}
 	}
-	globfree(&matches);
+	close(dirf);
 	sort(oavx);
 }
 
-static int
-sort(char **oavx)
+sort(oavx)
+char **oavx;
 {
-	register char **p1, **p2, *c;
+	register char **p1, **p2, **c;
 
 	p1 = oavx;
 	while (p1 < avx-1) {
@@ -2534,25 +2408,25 @@ sort(char **oavx)
 }
 
 
-static int
-match(char *s, char *p)
+match(s, p)
+char *s, *p;
 {
 	if (*s=='.' && *p!='.')
 		return(0);
 	return(amatch(s, p));
 }
 
-static int
-amatch(char *as, char *ap)
+amatch(as, ap)
+char *as, *ap;
 {
 	register char *s, *p;
-	register int scc;
+	register scc;
 	int c, cc, ok, lc;
 
 	s = as;
 	p = ap;
 	if (scc = *s++)
-		if ((scc &= 0177) == 0)
+		if ((scc =& 0177) == 0)
 			scc = 0200;
 	switch (c = *p++) {
 
@@ -2591,8 +2465,8 @@ amatch(char *as, char *ap)
 	}
 }
 
-static int
-umatch(char *s, char *p)
+umatch(s, p)
+char *s, *p;
 {
 	if(*p==0)
 		return(1);
@@ -2602,8 +2476,8 @@ umatch(char *s, char *p)
 	return(0);
 }
 
-static int
-compar(char *as1, char *as2)
+compar(as1, as2)
+char *as1, *as2;
 {
 	register char *s1, *s2;
 
@@ -2615,8 +2489,8 @@ compar(char *as1, char *as2)
 	return (*--s1 - *s2);
 }
 
-static char *
-cat(char *as1, char *as2)
+cat(as1, as2)
+char *as1, *as2;
 {
 	register char *s1, *s2;
 	register int c;
@@ -2626,7 +2500,7 @@ cat(char *as1, char *as2)
 	while (c = *s1++) {
 		if (s2 > ablimit)
 			gdie(ARGLNG);
-		c &= 0177;
+		c =& 0177;
 		if (c==0) {
 			*s2++ = '/';
 			break;
@@ -2649,21 +2523,10 @@ cat(char *as1, char *as2)
  *	purpose is to make internal glob work same as external one.
  *	something should be done about match/nomatch actions.
  */
-static void
-gdie(char *str)
+gdie(str)
+char *str;
 {
 	prs(ARG0); prs(": ");
 	prs(str); prs("\n");
 	exit(1);
-}
-
-static struct tree *
-tree(void)
-{
-	if(treec == TRESIZ) {
-		prs("Command line overflow\n");
-		error++;
-		longjmp(error_jmp, 1);
-	}
-	return(&trebuf[treec++]);
 }
