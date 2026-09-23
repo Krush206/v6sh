@@ -56,6 +56,7 @@
 #define LINSIZ 1000
 #define ARGSIZ 50
 #define TRESIZ 100
+#define EXPSIZ 1000
 
 #define QUOTE 0200
 #define FAND 1
@@ -91,6 +92,18 @@
 #define Z 'z'-'a'
 #define DOLREPL 1
 #define DOLREPQ 2
+
+#define ERR_SYNTAX "syntax error"
+#define ERR_EQUALS "'=' error"
+#define ERR_BADDIR ": bad directory"
+#define ERR_COUNT ": arg count"
+#define ERR_AGAIN "try again"
+#define ERR_OPEN ": cannot open"
+#define ERR_CREATE ": cannot create"
+#define ERR_FOUND ": not found"
+#define ERR_LARGE ": too large"
+#define ERR_CHAR "Too many characters"
+#define ERR_ARGS "Too many args"
 
 static struct tree {
   int t_dtyp;
@@ -133,7 +146,7 @@ static char	setintr;
 static char	*arginp;
 static int	onelflg;
 static int	stoperr;
-static char	*seta[26];
+static char	seta[26][EXPSIZ];
 
 #define	NSIG	sizeof mesg / sizeof *mesg
 static char	*mesg[] = {
@@ -179,6 +192,7 @@ static void prn(int);
 static int any(int, char *);
 static int equal(char *, char *);
 static void pwait(int);
+static void rdval(int, char *);
 
 int
 main(int c, char *av[])
@@ -221,7 +235,7 @@ main(int c, char *av[])
 			f = open(v[1], 0);
 			if(f < 0) {
 				prs(v[1]);
-				err(": cannot open",255);
+				err(ERR_OPEN, 255);
 			}
 		}
 	}
@@ -268,7 +282,7 @@ main1(void)
 			t = syntax(args, argp);
 		}
 		if(error != 0)
-			err("syntax error",255); else
+			err(ERR_SYNTAX, 255); else
 			execute(t, 0, 0);
 	}
 }
@@ -550,15 +564,34 @@ execute(struct tree *t, int *pf1, int *pf2)
 	if(t == 0)
 		return;
 	switch(t->DTYP) {
+		int p;
 
 	case TCOM:
-		cp1 = *t->DARR;
+		cp1 = t->DARR[0];
+		cp2 = t->DARR[1];
+		if(equal(cp1, "=")) {
+			if(cp2 == NULL) {
+				err(ERR_EQUALS, 255);
+				break;
+			}
+			i = *cp2 - 'a';
+			if(i>25 || i<0) {
+				err(ERR_EQUALS, 255);
+				break;
+			}
+			rdval(i, t->DARR[2]);
+			break;
+		}
 		if(equal(cp1, "chdir")) {
 			if(t->DARR[1] != 0) {
-				if(chdir(t->DARR[1]) < 0)
-					err("chdir: bad directory",255);
-			} else
-				err("chdir: arg count",255);
+				if(chdir(t->DARR[1]) < 0) {
+					prs(cp1);
+					err(ERR_BADDIR, 255);
+				}
+				break;
+			}
+			prs(cp1);
+			err(ERR_COUNT, 255);
 			break;
 		}
 		if(equal(cp1, "shift")) {
@@ -598,7 +631,7 @@ execute(struct tree *t, int *pf1, int *pf2)
 		if((f&FPAR) == 0)
 			i = fork();
 		if(i == -1) {
-			err("try again",255);
+			err(ERR_AGAIN, 255);
 			break;
 		}
 		if(i != 0) {
@@ -621,7 +654,7 @@ execute(struct tree *t, int *pf1, int *pf2)
 			i = open(t->DLPT, 0);
 			if(i < 0) {
 				prs(t->DLPT);
-				err(": cannot open",255);
+				err(ERR_OPEN, 255);
 				exit(255);
 			}
 		}
@@ -636,7 +669,7 @@ execute(struct tree *t, int *pf1, int *pf2)
 			i = creat(t->DRPT, 0666);
 			if(i < 0) {
 				prs(t->DRPT);
-				err(": cannot create",255);
+				err(ERR_CREATE, 255);
 				exit(255);
 			}
 		f1:
@@ -678,35 +711,32 @@ execute(struct tree *t, int *pf1, int *pf2)
 			prs("glob: cannot execute\n");
 			exit(255);
 		}
-		{
-			int p = 0;
-
-			scan(t, trim);
-			*linep = 0;
-			texec(t->DPTR, t);
-			cp1 = linep;
-			cp2 = getenv("PATH");
-			while((*cp1 = *cp2++)) {
-				p++;
-				if(*cp1 == ':') {
-					*cp1++ = '/';
-					cp2 = *t->DARR;
-					while((*cp1++ = *cp2++));
-					texec(linep, t);
-					cp1 = linep;
-					cp2 = &getenv("PATH")[p];
-					continue;
-				}
-				cp1++;
+		scan(t, trim);
+		*linep = 0;
+		texec(t->DPTR, t);
+		cp1 = linep;
+		cp2 = getenv("PATH");
+		p = 0;
+		while((*cp1 = *cp2++)) {
+			p++;
+			if(*cp1 == ':') {
+				*cp1++ = '/';
+				cp2 = t->DARR[0];
+				while((*cp1++ = *cp2++));
+				texec(linep, t);
+				cp1 = linep;
+				cp2 = &getenv("PATH")[p];
+				continue;
 			}
-			*cp1++ = '/';
-			cp2 = *t->DARR;
-			while((*cp1++ = *cp2++));
-			texec(linep, t);
-			prs(*t->DARR);
-			err(": not found",255);
-			exit(255);
+			cp1++;
 		}
+		*cp1++ = '/';
+		cp2 = t->DARR[0];
+		while((*cp1++ = *cp2++));
+		texec(linep, t);
+		prs(t->DARR[0]);
+		err(ERR_FOUND, 255);
+		exit(255);
 
 	case TFIL:
 		f = t->DFLG;
@@ -746,8 +776,8 @@ texec(char *f, struct tree *at)
 		exit(255);
 	}
 	if (errno==ENOMEM) {
-		prs(*t->DARR);
-		err(": too large",255);
+		prs(t->DARR[0]);
+		err(ERR_LARGE, 255);
 		exit(255);
 	}
 }
@@ -868,7 +898,7 @@ getc(int flag)
 		argp -= 10;
 		while((c=getc(!DOLREPL)) != '\n');
 		argp += 10;
-		err("Too many args", 255);
+		err(ERR_ARGS, 255);
 		gflg++;
 		return(c);
 	}
@@ -876,7 +906,7 @@ getc(int flag)
 		linep -= 10;
 		while((c=getc(!DOLREPL)) != '\n');
 		linep += 10;
-		err("Too many characters", 255);
+		err(ERR_CHAR, 255);
 		gflg++;
 		return(c);
 	}
@@ -1000,4 +1030,25 @@ pack:
 		}
 		*linep++ = c;
 	}
+}
+
+static void
+rdval(int i, char *na)
+{
+	register char *st, *np;
+	char c;
+
+	st = seta[i];
+	np = na;
+	if(np == NULL) {
+		*st = '\0';
+		return;
+	}
+	for (;;) {
+		c = *np++ & 0177;
+		*st++ = c;
+		if(c=='\n' || c=='\0') break;
+	}
+	if(c=='\n') st++;
+	*st = '\0';
 }
