@@ -570,7 +570,7 @@ execute(struct tree *t, int *pf1, int *pf2)
 		cp1 = t->DARR[0];
 		cp2 = t->DARR[1];
 		if(equal(cp1, "=")) {
-			if(cp2 == NULL) {
+			if(cp2 == 0) {
 				err(ERR_EQUALS, 255);
 				break;
 			}
