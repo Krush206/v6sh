@@ -287,7 +287,8 @@ main1(void)
 	}
 }
 
-static struct tree *tree(void)
+static struct tree *
+tree(void)
 {
 	if(treec == TRESIZ) {
 		prs("Command line overflow\n");
